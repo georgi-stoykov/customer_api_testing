@@ -1,0 +1,17 @@
+# Task assignment document — not for publication
+Quality_Assurance_Engineering_Task__API_Testing.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Test artifacts
+reports/
+.pytest_cache/
+
+# IDE / OS
+.idea/
+.vscode/
+Thumbs.db

@@ -1,14 +1,23 @@
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+# Tooling config only — this repo is a test suite, not a distributable package.
+# Dependencies (incl. dev tooling) live in requirements.txt
+# (pip install -r requirements.txt).
 
-[project]
-name = "currency-conversion-api-automation"
-version = "0.1.0"
-requires-python = ">=3.11"
-dependencies = [
-    "requests==2.34.2",
-    "pydantic==2.13.4",
-    "pytest==9.1.1",
-    "pytest-html==4.2.0",
-]
+[tool.pytest.ini_options]
+# Put the repo root on sys.path so tests import `engine` without an install
+# (no packaging, no `pip install -e .`).
+pythonpath = ["."]
+testpaths = ["tests"]
+log_level = "INFO"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# The formatter owns line length; long unsplittable strings are fine.
+ignore = ["E501"]
+
+[tool.ruff.format]
+# Respect the magic trailing comma so exploded signatures stay one-per-line.
+skip-magic-trailing-comma = false

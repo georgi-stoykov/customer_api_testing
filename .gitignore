@@ -7,16 +7,22 @@ __pycache__/
 .venv/
 venv/
 
-# Test artifacts
+# Packaging build metadata (should not appear, but ignore if ever generated)
+*.egg-info/
+build/
+dist/
+
+# Test / tooling caches & artifacts
 reports/
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/
+.docs/api-samples/
 
 # Local environment variables / secrets
 .env
 .plans
-.docs
 
 # IDE / OS
 .idea/

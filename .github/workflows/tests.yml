@@ -1,0 +1,32 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    env:
+      # Host is sensitive -> GitHub Actions secret.
+      API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      # Tunable knobs -> GitHub Actions repository variables. Change them in the
+      # GitHub UI (Settings -> Secrets and variables -> Actions -> Variables);
+      # no PR needed. Unset falls back to the code defaults.
+      REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT }}
+      SETTLEMENT_TIMEOUT: ${{ vars.SETTLEMENT_TIMEOUT }}
+      SETTLEMENT_POLL_INTERVAL: ${{ vars.SETTLEMENT_POLL_INTERVAL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt
+      - run: pytest --html=reports/report.html --self-contained-html
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pytest-report
+          path: reports/report.html

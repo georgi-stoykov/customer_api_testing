@@ -37,25 +37,34 @@ principles for the client layer:
 3. **Composites live in `flows/`.** Multi-step / orchestrated operations (account setup,
    settlement polling, full conversion) live in a separate `flows/` layer — never on resources.
 
-### Package: `customer_api_engine`
+### Package: `engine`
 
-This package is the framework's **driver layer** — one self-contained package for the whole
-customer API (account + wallets + quotes share one `BaseClient` + auth). Not split
-per-resource. Folder name, import name, and distribution name are all `customer_api_engine`,
-kept identical everywhere (no `package-dir` remapping) for consistency. It sits flat at the
-repo root alongside `tests/` (no `src/` layout).
+`engine` is the framework's **driver layer**, importable as `engine` (folder name = import
+name). The repo is a test suite, not a distributable package: there is no build backend and
+nothing is `pip install`ed. It sits flat at the repo root alongside `tests/` (no `src/` layout);
+pytest's `pythonpath` (in `pyproject.toml`) puts the repo root on `sys.path` so tests import the
+engine directly.
+
+`base.py` (the transport core) is **shared and API-agnostic** — a future second API becomes a
+sibling folder reusing it. Everything specific to the current customer API lives under `api/`,
+which holds **only models and resources**; its facade (`client.py`) and composites (`flows/`)
+sit at the `engine/` root.
 
 - `base.py` — `BaseClient` (one `Session`, auth, logging, `.send()`); `ApiError`;
   `ApiResponse` (internal transport: `status_code`, `json`, `as_model(model)`,
-  `raise_for_status(expected)`); the `@endpoint` decorator.
+  `raise_for_status(expected)`); the `@endpoint` decorator. Shared across APIs.
 - `client.py` — `ApiClient` facade composing resources over ONE `BaseClient` (dependency
   injection → auth defined in one place).
-- `config.py` — base URL (from `API_BASE_URL`) and timeouts (env-overridable).
-- `models/` — pydantic v2 (`Wallet`, `AccountWallets`, `Quote`, `QuoteCreateRequest`,
-  `QuoteStatus`). Response models own their own selection: `AccountWallets` is a
-  `RootModel[list[Wallet]]` (the `/api/wallet` response) exposing
+- `constants/` — the single home for config/domain values (no magic literals; see
+  `CODING_STYLE.md`): `settings.py` (env-sourced base URL + timeouts), `currencies.py`
+  (`Currency` StrEnum), `http.py` (`Header`, `MediaType`, `AuthScheme`). HTTP methods/statuses
+  come from stdlib `http.HTTPMethod` / `http.HTTPStatus`.
+- `api/models/` — pydantic v2 (`Wallet`, `AccountWallets`, `Quote`, `QuoteCreateRequest`,
+  `QuoteStatus`, `PaymentStatus`, `PayMethod`). Response models own their own selection:
+  `AccountWallets` is a `RootModel[list[Wallet]]` (the `/api/wallet` response) exposing
   `AccountWallets.by_currency(code) -> Wallet`.
-- `resources/` — pure endpoint clients: `AccountApi`, `WalletApi`, `QuoteApi`.
+- `api/resources/` — pure endpoint clients: `AccountApi`, `WalletApi`, `QuoteApi`. Endpoint
+  paths are named constants in each resource module.
 - `flows/` — composites: `new_account()`, `wait_for_settlement()`, `convert()`.
 
 ### Naming
@@ -67,6 +76,9 @@ repo root alongside `tests/` (no `src/` layout).
 
 ## Coding standards
 
+- **Code style is enforced by Ruff and documented in `CODING_STYLE.md`** (import grouping,
+  exploded signatures, no magic string literals → `constants/` + enums, minimal comments). Read
+  it before writing code.
 - **All money is `Decimal`.** Money fields arrive as strings — parse to `Decimal`, never
   `float`. Two comparison rules: (1) the API's own reported numbers, and wallet deltas vs. the
   reported `amountIn`/`amountOut`, are compared **exactly**; (2) values we recompute (fee,
@@ -79,7 +91,8 @@ repo root alongside `tests/` (no `src/` layout).
   contract-critical fields and rely on `extra="ignore"` (set on the `ApiModel` base) to drop the
   simulator's many unmodeled fields silently rather than hand-modeling noise (e.g. `Wallet.currency`
   exposes `code`, not its ~12 other fields). Model files are split **per resource**
-  (`models/account.py`, `models/wallets.py`, `models/quotes.py`, `models/common.py`).
+  (`api/models/account.py`, `api/models/wallets.py`, `api/models/quotes.py`,
+  `api/models/common.py`).
 - **Contract enforcement via `@endpoint(model=..., expected_status=...)`.** Every endpoint method
   is wrapped by the decorator, which enforces BOTH the status code AND the data contract
   (pydantic) by default. The endpoint body just returns `send()`'s `ApiResponse`.
@@ -88,8 +101,8 @@ repo root alongside `tests/` (no `src/` layout).
   - Single `check` flag only — no split status/schema flags, no `no_checks()` context manager
     (avoids hidden global state).
   - Strict path raises `ApiError`; return type is `Model | ApiResponse`.
-  - `expected_status` is declared per endpoint (e.g. `201` for quote create, `200` for
-    accept and the rest).
+  - `expected_status` is declared per endpoint as a stdlib `http.HTTPStatus` (e.g.
+    `HTTPStatus.CREATED` for quote create, `HTTPStatus.OK` for accept and the rest).
 
 ## Testing
 

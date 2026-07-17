@@ -1,0 +1,9 @@
+requests==2.34.2
+pydantic==2.13.4
+pytest==9.1.1
+pytest-html==4.2.0
+python-dotenv==1.2.1
+
+# Dev tooling — formatting/linting and the pre-commit runner; not needed to run the tests.
+ruff==0.15.22
+pre-commit==4.6.0

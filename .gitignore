@@ -10,6 +10,13 @@ venv/
 # Test artifacts
 reports/
 .pytest_cache/
+.coverage
+htmlcov/
+
+# Local environment variables / secrets
+.env
+.plans
+.docs
 
 # IDE / OS
 .idea/

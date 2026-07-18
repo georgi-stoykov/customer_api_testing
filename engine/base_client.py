@@ -52,7 +52,7 @@ def endpoint(
 ) -> Callable:
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
-        def wrapper(*args, check: bool = True, **kwargs):
+        def wrapper(*args: object, check: bool = True, **kwargs: object) -> BaseModel | ApiResponse:
             response: ApiResponse = func(*args, **kwargs)
             if not check:
                 return response
@@ -86,8 +86,8 @@ class BaseClient:
         method: str,
         path: str,
         *,
-        json: Any = None,
-        params: Any = None,
+        json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
     ) -> ApiResponse:
         url = self._base_url + path
         start = time.perf_counter()

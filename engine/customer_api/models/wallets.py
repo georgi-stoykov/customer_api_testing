@@ -1,11 +1,13 @@
 from decimal import Decimal
-from pydantic import RootModel
+from pydantic import Field, RootModel
 from engine.constants.currencies import Currency
-from engine.wallet_payments_api.models.common import ApiModel
+from engine.customer_api.models.common import ApiModel
 
 
 class WalletCurrency(ApiModel):
     code: str
+    quantity_precision: int = Field(alias="quantityPrecision")
+    price_precision: int = Field(alias="pricePrecision")
 
 
 class Wallet(ApiModel):

@@ -1,6 +1,6 @@
 from engine.base_client import BaseClient
 from engine.constants import settings
-from engine.wallet_payments_api.resources import AccountApi, QuoteApi, WalletApi
+from engine.customer_api.resources import CustomerApi, QuoteApi, WalletApi
 
 
 class ApiClient:
@@ -15,6 +15,6 @@ class ApiClient:
             token=token,
             timeout=settings.REQUEST_TIMEOUT,
         )
-        self.account = AccountApi(self._client)
+        self.customer = CustomerApi(self._client)
         self.wallet = WalletApi(self._client)
         self.quote = QuoteApi(self._client)

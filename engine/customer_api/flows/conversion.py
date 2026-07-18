@@ -2,8 +2,8 @@ import time
 from decimal import Decimal
 from engine.constants import settings
 from engine.constants.currencies import Currency
-from engine.wallet_payments_api.client import ApiClient
-from engine.wallet_payments_api.models.quotes import PaymentStatus, Quote, QuoteCreateRequest
+from engine.customer_api.api_client import ApiClient
+from engine.customer_api.models.quotes import PaymentStatus, Quote, QuoteCreateRequest
 
 
 def wait_for_settlement(
@@ -25,7 +25,7 @@ def wait_for_settlement(
         time.sleep(interval)
 
 
-def convert(
+def send_quote(
     api: ApiClient,
     *,
     from_currency: Currency,

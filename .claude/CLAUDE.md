@@ -47,9 +47,9 @@ engine directly.
 
 Only the **shared, API-agnostic** pieces sit at the `engine/` root — `base_client.py` (the
 transport core) and `constants/` (config + domain values). **Everything specific to one customer
-API lives under that API's folder** (`wallet_payments_api/`): its models, resources, facade
-(`wallet_payments_api/client.py`), and composites (`wallet_payments_api/flows/`). A future second
-API becomes a sibling folder next to `wallet_payments_api/`, self-contained and reusing
+API lives under that API's folder** (`customer_api/`): its models, resources, facade
+(`customer_api/api_client.py`), and composites (`customer_api/flows/`). A future second
+API becomes a sibling folder next to `customer_api/`, self-contained and reusing
 `base_client.py`/`constants/` — so nothing API-specific is ever stranded at the root where a
 second API's facade/flows would collide with it.
 
@@ -60,22 +60,22 @@ second API's facade/flows would collide with it.
   `CODING_STYLE.md`): `settings.py` (env-sourced base URL + timeouts), `currencies.py`
   (`Currency` StrEnum), `http.py` (`Header`, `MediaType`, `AuthScheme`). HTTP methods/statuses
   come from stdlib `http.HTTPMethod` / `http.HTTPStatus`.
-- `wallet_payments_api/client.py` — `ApiClient` facade composing resources over ONE `BaseClient`
+- `customer_api/api_client.py` — `ApiClient` facade composing resources over ONE `BaseClient`
   (dependency injection → auth defined in one place). Hand-written composition, so it lives at the
-  `wallet_payments_api/` root beside the codegen-shaped `models/` + `resources/`, not inside them.
-- `wallet_payments_api/models/` — pydantic v2 (`Wallet`, `AccountWallets`, `Quote`,
+  `customer_api/` root beside the codegen-shaped `models/` + `resources/`, not inside them.
+- `customer_api/models/` — pydantic v2 (`Wallet`, `AccountWallets`, `Quote`,
   `QuoteCreateRequest`, `QuoteStatus`, `PaymentStatus`, `PayMethod`). Response models own their
   own selection: `AccountWallets` is a `RootModel[list[Wallet]]` (the `/api/wallet` response)
   exposing `AccountWallets.by_currency(code) -> Wallet`.
-- `wallet_payments_api/resources/` — pure endpoint clients: `AccountApi`, `WalletApi`, `QuoteApi`.
+- `customer_api/resources/` — pure endpoint clients: `CustomerApi`, `WalletApi`, `QuoteApi`.
   Endpoint paths are named constants in each resource module.
-- `wallet_payments_api/flows/` — composites: `new_account()`, `wait_for_settlement()`,
-  `convert()`. Multi-step orchestration is **not** a step/endpoint — the name stays `flows`,
+- `customer_api/flows/` — composites: `new_customer()`, `wait_for_settlement()`,
+  `send_quote()`. Multi-step orchestration is **not** a step/endpoint — the name stays `flows`,
   guarding the boundary against single-endpoint wrappers (those belong on resources).
 
 ### Naming
 
-- Facade = `ApiClient`; resources = `WalletApi` / `QuoteApi` / `AccountApi` (OpenAPI codegen
+- Facade = `ApiClient`; resources = `WalletApi` / `QuoteApi` / `CustomerApi` (OpenAPI codegen
   convention). Do **not** use `Controller` (a server-side term).
 - **No `helpers/` folder.** If something doesn't fit a layer, name the layer, don't dump it in
   helpers.
@@ -87,9 +87,16 @@ second API's facade/flows would collide with it.
   it before writing code.
 - **All money is `Decimal`.** Money fields arrive as strings — parse to `Decimal`, never
   `float`. Two comparison rules: (1) the API's own reported numbers, and wallet deltas vs. the
-  reported `amountIn`/`amountOut`, are compared **exactly**; (2) values we recompute (fee,
-  `amountOut`) are compared after quantizing to the target currency's `quantityPrecision`
-  (ROUND_HALF_UP, matching the API), never against a hard-coded rate or an arbitrary float epsilon.
+  reported `amountIn`/`amountOut`, are compared **exactly**; (2) recomputed `fee`
+  (`amountIn × 0.0001`) is compared exactly after quantizing the recomputed side to the **source**
+  currency's `quantityPrecision` (ROUND_HALF_UP, matching the API; only the recomputed side is
+  quantized — `Decimal` equality is numeric, and quantizing the API's side would mask a
+  mis-rounded value); (3) recomputed `amountOut` (`(amountIn − fee) × price`) **cannot** be
+  compared exactly: the API rounds `price` (to `pricePrecision`) and `amountOut` (to the target's
+  `quantityPrecision`) independently from an internal full-precision rate it never exposes
+  (`netPrice`/`grossPrice` are equally rounded). It is compared within a bound derived from those
+  reported quanta — `(amountIn − fee) × half-price-quantum + half-amountOut-quantum` — never a
+  hard-coded rate or an arbitrary float epsilon.
 - **Request boilerplate lives on the model, not the resource.** Use pydantic defaults + aliases
   (`populate_by_name=True`, `from_` aliased to `"from"`, money as `str`,
   `model_dump(by_alias=True)`).
@@ -97,8 +104,8 @@ second API's facade/flows would collide with it.
   contract-critical fields and rely on `extra="ignore"` (set on the `ApiModel` base) to drop the
   simulator's many unmodeled fields silently rather than hand-modeling noise (e.g. `Wallet.currency`
   exposes `code`, not its ~12 other fields). Model files are split **per resource**
-  (`wallet_payments_api/models/account.py`, `wallet_payments_api/models/wallets.py`,
-  `wallet_payments_api/models/quotes.py`, `wallet_payments_api/models/common.py`).
+  (`customer_api/models/customer.py`, `customer_api/models/wallets.py`,
+  `customer_api/models/quotes.py`, `customer_api/models/common.py`).
 - **Contract enforcement via `@endpoint(model=..., expected_status=...)`.** Every endpoint method
   is wrapped by the decorator, which enforces BOTH the status code AND the data contract
   (pydantic) by default. The endpoint body just returns `send()`'s `ApiResponse`.
@@ -119,7 +126,9 @@ second API's facade/flows would collide with it.
   one-class edit. Schema validation is handled by pydantic; asserters cover business math.
   - Asserters are currently **deferred** — extract them from repeating patterns rather than
     building upfront; keep them as classes and inject via fixtures.
-- `tests/conftest.py` provides an `api` fixture built via `flows.new_account()`.
+- `tests/conftest.py` provides a `new_customer` fixture (a fresh `ApiClient` per test, built via
+  `flows.new_customer()`; the fixture shares the flow's name, so conftest imports the `flows`
+  module rather than the function).
 - **Settlement is asynchronous.** Accept returns 200 immediately with balances unchanged; funds
   settle ~5–8s later. E2E tests must POLL `GET /quote/{uuid}` until `paymentStatus=SUCCESS`
   (timeout ~30s) BEFORE asserting balances.

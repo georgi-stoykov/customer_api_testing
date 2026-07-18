@@ -33,6 +33,11 @@ ruff format engine tests
   - HTTP methods and status codes → stdlib `http.HTTPMethod` / `http.HTTPStatus`
   - endpoint paths → named constants in the resource module that uses them
   Test data values (amounts, references) are not config and may stay inline.
+- **Every function is fully annotated** — all parameters and the return type, tests included
+  (fixture-typed parameters, `-> None` returns) — enforced by Ruff's `ANN` rules
+  (flake8-annotations). Bare `Any` is disallowed (`ANN401`): use the precise type, `object` for
+  pass-through decorator `*args`/`**kwargs`, or a contained generic like `dict[str, Any]` where
+  the payload is genuinely dynamic (transport JSON).
 - **Enums use `StrEnum`** so a member equals its string value — safe in f-strings, comparisons, and
   JSON serialisation.
 - **Money is `Decimal`**, never `float`.

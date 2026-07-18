@@ -2,7 +2,7 @@ from decimal import Decimal
 from enum import StrEnum
 from pydantic import Field
 from engine.constants.currencies import Currency
-from engine.wallet_payments_api.models.common import ApiModel
+from engine.customer_api.models.common import ApiModel
 
 DEFAULT_QUOTE_REFERENCE = "conversion-test"
 
@@ -45,5 +45,5 @@ class Quote(ApiModel):
     amount_out: Decimal = Field(alias="amountOut")
     price: Decimal
     fee: Decimal
-    quote_status: str = Field(alias="quoteStatus")
-    payment_status: str = Field(alias="paymentStatus")
+    quote_status: QuoteStatus = Field(alias="quoteStatus")
+    payment_status: PaymentStatus = Field(alias="paymentStatus")

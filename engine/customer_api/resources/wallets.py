@@ -1,6 +1,6 @@
 from http import HTTPMethod, HTTPStatus
-from engine.base_client import BaseClient, endpoint
-from engine.wallet_payments_api.models.wallets import AccountWallets
+from engine.base_client import ApiResponse, BaseClient, endpoint
+from engine.customer_api.models.wallets import AccountWallets
 
 WALLETS = "/api/wallet"
 
@@ -10,5 +10,5 @@ class WalletApi:
         self._client = client
 
     @endpoint(model=AccountWallets, expected_status=HTTPStatus.OK)
-    def list(self):
+    def list(self) -> ApiResponse:
         return self._client.send(HTTPMethod.GET, WALLETS)

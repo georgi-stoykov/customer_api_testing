@@ -1,4 +1,4 @@
-from engine.wallet_payments_api.models.common import ApiModel
+from engine.customer_api.models.common import ApiModel
 
 
 class InitResponse(ApiModel):

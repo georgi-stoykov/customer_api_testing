@@ -1,6 +1,6 @@
 from http import HTTPMethod, HTTPStatus
-from engine.base_client import BaseClient, endpoint
-from engine.wallet_payments_api.models.quotes import Quote, QuoteCreateRequest
+from engine.base_client import ApiResponse, BaseClient, endpoint
+from engine.customer_api.models.quotes import Quote, QuoteCreateRequest
 
 QUOTES = "/api/v1/quote"
 QUOTE = "/api/v1/quote/{uuid}"
@@ -12,7 +12,7 @@ class QuoteApi:
         self._client = client
 
     @endpoint(model=Quote, expected_status=HTTPStatus.CREATED)
-    def create(self, request: QuoteCreateRequest):
+    def create(self, request: QuoteCreateRequest) -> ApiResponse:
         return self._client.send(
             HTTPMethod.POST,
             QUOTES,
@@ -20,9 +20,9 @@ class QuoteApi:
         )
 
     @endpoint(model=Quote, expected_status=HTTPStatus.OK)
-    def get(self, uuid: str):
+    def get(self, uuid: str) -> ApiResponse:
         return self._client.send(HTTPMethod.GET, QUOTE.format(uuid=uuid))
 
     @endpoint(model=Quote, expected_status=HTTPStatus.OK)
-    def accept(self, uuid: str):
+    def accept(self, uuid: str) -> ApiResponse:
         return self._client.send(HTTPMethod.PUT, QUOTE_ACCEPT.format(uuid=uuid))

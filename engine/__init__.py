@@ -1,3 +1,3 @@
-from engine.wallet_payments_api.client import ApiClient
+from engine.customer_api.api_client import ApiClient
 
 __all__ = ["ApiClient"]

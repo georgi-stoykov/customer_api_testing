@@ -1,6 +1,6 @@
 from http import HTTPMethod, HTTPStatus
+from engine.api_models.customer import InitResponse
 from engine.base_client import ApiResponse, BaseClient, endpoint
-from engine.customer_api.models.customer import InitResponse
 
 INIT = "/init"
 

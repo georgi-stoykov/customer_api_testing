@@ -28,7 +28,8 @@ ruff format engine tests
 - **No magic string literals** for configuration or domain values. Give them a clearly named,
   single-source constant or enum:
   - config → `engine/constants/settings.py`
-  - currencies → `engine/constants/currencies.py`
+  - currencies → `engine/api_constants/currencies.py`
+  - fee rate / settlement timing → `engine/api_constants/fees.py`, `engine/api_constants/settlement.py`
   - HTTP headers / media types / auth scheme → `engine/constants/http.py`
   - HTTP methods and status codes → stdlib `http.HTTPMethod` / `http.HTTPStatus`
   - endpoint paths → named constants in the resource module that uses them
@@ -38,6 +39,16 @@ ruff format engine tests
   (flake8-annotations). Bare `Any` is disallowed (`ANN401`): use the precise type, `object` for
   pass-through decorator `*args`/`**kwargs`, or a contained generic like `dict[str, Any]` where
   the payload is genuinely dynamic (transport JSON).
+- **No context-free variable names.** A name must answer "of what?" on its own: `wallets_before`,
+  not `before`; `allowed_rounding_error`, not `tolerance`; `target_currency`, not `target`.
+  Generic single-word names (`value`, `result`) are acceptable only as parameters of a small,
+  single-purpose function whose name supplies the context (e.g. `round_half_up(value,
+  decimal_places)`).
+- **Values derived independently for verification are named `expected_*`** (`expected_fee`,
+  `expected_amount_out`) — the standard testing vocabulary, matching the `monetary` module's
+  `actual`/`expected` parameters so the variable flows into the call site unchanged
+  (`expected=expected_fee`). Do not use `recomputed_*` or `self_computed_*`. Assertion methods
+  name what they verify, not the mechanism: `assert_fee`, not `assert_fee_recomputed`.
 - **Enums use `StrEnum`** so a member equals its string value — safe in f-strings, comparisons, and
   JSON serialisation.
 - **Money is `Decimal`**, never `float`.

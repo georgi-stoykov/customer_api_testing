@@ -1,6 +1,6 @@
+from engine.api_resources import CustomerApi, QuoteApi, WalletApi
 from engine.base_client import BaseClient
 from engine.constants import settings
-from engine.customer_api.resources import CustomerApi, QuoteApi, WalletApi
 
 
 class ApiClient:

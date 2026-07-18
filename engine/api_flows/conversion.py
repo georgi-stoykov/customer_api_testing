@@ -1,17 +1,17 @@
 import time
 from decimal import Decimal
-from engine.constants import settings
-from engine.constants.currencies import Currency
-from engine.customer_api.api_client import ApiClient
-from engine.customer_api.models.quotes import PaymentStatus, Quote, QuoteCreateRequest
+from engine.api_client import ApiClient
+from engine.api_constants import settlement
+from engine.api_constants.currencies import Currency
+from engine.api_models.quotes import PaymentStatus, Quote, QuoteCreateRequest
 
 
 def wait_for_settlement(
     api: ApiClient,
     uuid: str,
     *,
-    timeout: float = settings.SETTLEMENT_TIMEOUT,
-    interval: float = settings.SETTLEMENT_POLL_INTERVAL,
+    timeout: float = settlement.SETTLEMENT_TIMEOUT,
+    interval: float = settlement.SETTLEMENT_POLL_INTERVAL,
 ) -> Quote:
     deadline = time.monotonic() + timeout
     while True:

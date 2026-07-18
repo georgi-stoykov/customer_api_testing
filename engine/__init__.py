@@ -1,3 +1,3 @@
-from engine.customer_api.api_client import ApiClient
+from engine.api_client import ApiClient
 
 __all__ = ["ApiClient"]

@@ -1,8 +1,8 @@
 import pytest
-from engine.constants.currencies import Currency
-from engine.customer_api.api_client import ApiClient
-from engine.customer_api.asserters import ConversionAsserter
-from engine.customer_api.flows import send_quote
+from engine.api_asserters import ConversionAsserter
+from engine.api_client import ApiClient
+from engine.api_constants.currencies import Currency
+from engine.api_flows import send_quote
 
 
 @pytest.mark.parametrize(

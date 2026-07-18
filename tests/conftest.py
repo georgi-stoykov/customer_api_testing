@@ -1,7 +1,7 @@
 import pytest
-from engine.customer_api import flows
-from engine.customer_api.api_client import ApiClient
-from engine.customer_api.asserters import ConversionAsserter
+from engine import api_flows as flows
+from engine.api_asserters import ConversionAsserter
+from engine.api_client import ApiClient
 
 
 @pytest.fixture

@@ -1,6 +1,6 @@
 from http import HTTPMethod, HTTPStatus
+from engine.api_models.wallets import AccountWallets
 from engine.base_client import ApiResponse, BaseClient, endpoint
-from engine.customer_api.models.wallets import AccountWallets
 
 WALLETS = "/api/wallet"
 

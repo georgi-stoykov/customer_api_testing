@@ -1,13 +1,13 @@
-from engine.customer_api.models.common import ApiModel
-from engine.customer_api.models.customer import InitResponse
-from engine.customer_api.models.quotes import (
+from engine.api_models.common import ApiModel
+from engine.api_models.customer import InitResponse
+from engine.api_models.quotes import (
     PaymentStatus,
     PayMethod,
     Quote,
     QuoteCreateRequest,
     QuoteStatus,
 )
-from engine.customer_api.models.wallets import AccountWallets, Wallet, WalletCurrency
+from engine.api_models.wallets import AccountWallets, Wallet, WalletCurrency
 
 __all__ = [
     "ApiModel",

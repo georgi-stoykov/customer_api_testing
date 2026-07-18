@@ -1,8 +1,8 @@
 from decimal import Decimal
 from enum import StrEnum
 from pydantic import Field
-from engine.constants.currencies import Currency
-from engine.customer_api.models.common import ApiModel
+from engine.api_constants.currencies import Currency
+from engine.api_models.common import ApiModel
 
 DEFAULT_QUOTE_REFERENCE = "conversion-test"
 

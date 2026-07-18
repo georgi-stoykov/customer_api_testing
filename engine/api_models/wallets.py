@@ -1,7 +1,7 @@
 from decimal import Decimal
 from pydantic import Field, RootModel
-from engine.constants.currencies import Currency
-from engine.customer_api.models.common import ApiModel
+from engine.api_constants.currencies import Currency
+from engine.api_models.common import ApiModel
 
 
 class WalletCurrency(ApiModel):

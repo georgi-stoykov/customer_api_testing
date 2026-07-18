@@ -1,4 +1,4 @@
-from engine.customer_api.models.common import ApiModel
+from engine.api_models.common import ApiModel
 
 
 class InitResponse(ApiModel):

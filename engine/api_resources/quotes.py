@@ -1,6 +1,6 @@
 from http import HTTPMethod, HTTPStatus
+from engine.api_models.quotes import Quote, QuoteCreateRequest
 from engine.base_client import ApiResponse, BaseClient, endpoint
-from engine.customer_api.models.quotes import Quote, QuoteCreateRequest
 
 QUOTES = "/api/v1/quote"
 QUOTE = "/api/v1/quote/{uuid}"

@@ -84,7 +84,7 @@ Relevant response fields:
 - `fees.value.service` — fee amount in source currency (`"0.0001"`)
 - `processingFee` / `fees.*.processing` — `"0"` in observed trades
 
-## Rounding of reported numbers — `amountOut` is NOT exactly recomputable ⚠️
+## Rounding of reported numbers — `amountOut` cannot be derived exactly ⚠️
 
 The simulator prices the trade with an **internal full-precision rate it never exposes**, then
 rounds the published fields **independently**:
@@ -95,27 +95,29 @@ rounds the published fields **independently**:
   `quantityPrecision` (ROUND_HALF_UP).
 - `fee` → exact: `amountIn × 0.0001` at the source currency's `quantityPrecision`.
 
-Consequence: recomputing `amountOut = (amountIn − fee) × price` from the *reported* price
-carries an error of up to `(amountIn − fee) × 5e-9` (half a price quantum), which can exceed
-the last digit of `amountOut` whenever `amountIn` is large relative to the price scale.
+Consequence: deriving `expected_amount_out = (amountIn − fee) × price` from the *reported* price
+carries an error of up to `(amountIn − fee) × 5e-9` (the max rounding error of an 8-dp price),
+which can exceed the last digit of `amountOut` whenever `amountIn` is large relative to the
+price scale.
 
 Probed evidence (987 TRX → ETH): reported `price = "0.00008085"`, reported
 `amountOut = "0.07979202"` → implied internal rate `0.000080851063…`, which rounds back to the
-reported price, while the recompute from the rounded price is off by ~1.05e-6 — about 105 units
-of ETH's 8th decimal (the derived bound allows up to `986.9 × 5e-9 ≈ 493` units). The 420 TRX → USDT pair sits *on* the boundary — the recompute matched in some runs and
-missed by one ulp in others (observed both). 1 ETH → TRX always matches because
-`(amountIn − fee) × 5e-9 ≈ 5e-9` is far below TRX's 6-dp quantum — which is why the worked
-example above happens to reproduce the response exactly.
+reported price, while `expected_amount_out` derived from the rounded price is off by ~1.05e-6 —
+about 105 units of ETH's 8th decimal (the derived bound allows up to `986.9 × 5e-9 ≈ 493`
+units). The 420 TRX → USDT pair sits *on* the boundary — the expected value matched in some runs
+and missed by one ulp in others (observed both). 1 ETH → TRX always matches because
+`(amountIn − fee) × 5e-9 ≈ 5e-9` is far below the max rounding error of TRX's 6-dp amounts —
+which is why the worked example above happens to reproduce the response exactly.
 
 The inverse check (`price == round(amountOut / (amountIn − fee), 8)`) fails in the opposite
 direction (e.g. ETH → TRX), where `amountOut`'s own rounding dominates. Neither direction is
 exact for all pairs.
 
-**Implication for asserters:** compare recomputed `amountOut` within a bound derived from the
-two reported quanta — `(amountIn − fee) × half-price-quantum + half-amountOut-quantum` — not by
-exact quantized equality, and not with an arbitrary epsilon. (Rule recorded in
-`.claude/CLAUDE.md`; implemented in `engine/customer_api/asserters/conversion.py`.)
-The `fee` recompute **is** exact and stays an equality check.
+**Implication for asserters:** compare `expected_amount_out` within
+`(amountIn − fee) × max_rounding_error(pricePrecision) + max_rounding_error(quantityPrecision)`
+— not by exact rounded equality, and not with an arbitrary epsilon. (Rule recorded in
+`.claude/CLAUDE.md`; implemented in `engine/api_asserters/conversion.py`.)
+`expected_fee` **is** exact and stays an equality check.
 
 ## Quote lifecycle — settlement is ASYNCHRONOUS ⚠️
 

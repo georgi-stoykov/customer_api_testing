@@ -5,11 +5,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any
-
 import requests
 from pydantic import BaseModel
-
-from .constants.http import AuthScheme, Header, MediaType
+from engine.constants.http import AuthScheme, Header, MediaType
 
 logger = logging.getLogger(__name__)
 

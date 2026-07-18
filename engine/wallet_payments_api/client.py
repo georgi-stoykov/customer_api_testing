@@ -1,6 +1,6 @@
-from .api.resources import AccountApi, QuoteApi, WalletApi
-from .base import BaseClient
-from .constants import settings
+from engine.base_client import BaseClient
+from engine.constants import settings
+from engine.wallet_payments_api.resources import AccountApi, QuoteApi, WalletApi
 
 
 class ApiClient:

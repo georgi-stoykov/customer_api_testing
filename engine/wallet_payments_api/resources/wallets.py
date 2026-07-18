@@ -1,7 +1,6 @@
 from http import HTTPMethod, HTTPStatus
-
-from ...base import BaseClient, endpoint
-from ..models.wallets import AccountWallets
+from engine.base_client import BaseClient, endpoint
+from engine.wallet_payments_api.models.wallets import AccountWallets
 
 WALLETS = "/api/wallet"
 

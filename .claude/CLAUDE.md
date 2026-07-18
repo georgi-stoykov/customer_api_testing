@@ -45,27 +45,33 @@ nothing is `pip install`ed. It sits flat at the repo root alongside `tests/` (no
 pytest's `pythonpath` (in `pyproject.toml`) puts the repo root on `sys.path` so tests import the
 engine directly.
 
-`base.py` (the transport core) is **shared and API-agnostic** — a future second API becomes a
-sibling folder reusing it. Everything specific to the current customer API lives under `api/`,
-which holds **only models and resources**; its facade (`client.py`) and composites (`flows/`)
-sit at the `engine/` root.
+Only the **shared, API-agnostic** pieces sit at the `engine/` root — `base_client.py` (the
+transport core) and `constants/` (config + domain values). **Everything specific to one customer
+API lives under that API's folder** (`wallet_payments_api/`): its models, resources, facade
+(`wallet_payments_api/client.py`), and composites (`wallet_payments_api/flows/`). A future second
+API becomes a sibling folder next to `wallet_payments_api/`, self-contained and reusing
+`base_client.py`/`constants/` — so nothing API-specific is ever stranded at the root where a
+second API's facade/flows would collide with it.
 
-- `base.py` — `BaseClient` (one `Session`, auth, logging, `.send()`); `ApiError`;
-  `ApiResponse` (internal transport: `status_code`, `json`, `as_model(model)`,
+- `base_client.py` (root, shared) — `BaseClient` (one `Session`, auth, logging, `.send()`);
+  `ApiError`; `ApiResponse` (internal transport: `status_code`, `json`, `as_model(model)`,
   `raise_for_status(expected)`); the `@endpoint` decorator. Shared across APIs.
-- `client.py` — `ApiClient` facade composing resources over ONE `BaseClient` (dependency
-  injection → auth defined in one place).
-- `constants/` — the single home for config/domain values (no magic literals; see
+- `constants/` (root, shared) — the single home for config/domain values (no magic literals; see
   `CODING_STYLE.md`): `settings.py` (env-sourced base URL + timeouts), `currencies.py`
   (`Currency` StrEnum), `http.py` (`Header`, `MediaType`, `AuthScheme`). HTTP methods/statuses
   come from stdlib `http.HTTPMethod` / `http.HTTPStatus`.
-- `api/models/` — pydantic v2 (`Wallet`, `AccountWallets`, `Quote`, `QuoteCreateRequest`,
-  `QuoteStatus`, `PaymentStatus`, `PayMethod`). Response models own their own selection:
-  `AccountWallets` is a `RootModel[list[Wallet]]` (the `/api/wallet` response) exposing
-  `AccountWallets.by_currency(code) -> Wallet`.
-- `api/resources/` — pure endpoint clients: `AccountApi`, `WalletApi`, `QuoteApi`. Endpoint
-  paths are named constants in each resource module.
-- `flows/` — composites: `new_account()`, `wait_for_settlement()`, `convert()`.
+- `wallet_payments_api/client.py` — `ApiClient` facade composing resources over ONE `BaseClient`
+  (dependency injection → auth defined in one place). Hand-written composition, so it lives at the
+  `wallet_payments_api/` root beside the codegen-shaped `models/` + `resources/`, not inside them.
+- `wallet_payments_api/models/` — pydantic v2 (`Wallet`, `AccountWallets`, `Quote`,
+  `QuoteCreateRequest`, `QuoteStatus`, `PaymentStatus`, `PayMethod`). Response models own their
+  own selection: `AccountWallets` is a `RootModel[list[Wallet]]` (the `/api/wallet` response)
+  exposing `AccountWallets.by_currency(code) -> Wallet`.
+- `wallet_payments_api/resources/` — pure endpoint clients: `AccountApi`, `WalletApi`, `QuoteApi`.
+  Endpoint paths are named constants in each resource module.
+- `wallet_payments_api/flows/` — composites: `new_account()`, `wait_for_settlement()`,
+  `convert()`. Multi-step orchestration is **not** a step/endpoint — the name stays `flows`,
+  guarding the boundary against single-endpoint wrappers (those belong on resources).
 
 ### Naming
 
@@ -91,8 +97,8 @@ sit at the `engine/` root.
   contract-critical fields and rely on `extra="ignore"` (set on the `ApiModel` base) to drop the
   simulator's many unmodeled fields silently rather than hand-modeling noise (e.g. `Wallet.currency`
   exposes `code`, not its ~12 other fields). Model files are split **per resource**
-  (`api/models/account.py`, `api/models/wallets.py`, `api/models/quotes.py`,
-  `api/models/common.py`).
+  (`wallet_payments_api/models/account.py`, `wallet_payments_api/models/wallets.py`,
+  `wallet_payments_api/models/quotes.py`, `wallet_payments_api/models/common.py`).
 - **Contract enforcement via `@endpoint(model=..., expected_status=...)`.** Every endpoint method
   is wrapped by the decorator, which enforces BOTH the status code AND the data contract
   (pydantic) by default. The endpoint body just returns `send()`'s `ApiResponse`.

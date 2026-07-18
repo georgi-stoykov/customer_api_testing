@@ -1,7 +1,6 @@
 import pytest
-
-from engine.client import ApiClient
-from engine.flows import new_account
+from engine.wallet_payments_api.client import ApiClient
+from engine.wallet_payments_api.flows import new_account
 
 
 @pytest.fixture

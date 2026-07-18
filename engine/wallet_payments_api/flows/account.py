@@ -1,4 +1,4 @@
-from ..client import ApiClient
+from engine.wallet_payments_api.client import ApiClient
 
 
 def new_account(base_url: str | None = None) -> ApiClient:

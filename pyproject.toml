@@ -14,9 +14,24 @@ target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "I", "UP", "B", "TID"]
 # The formatter owns line length; long unsplittable strings are fine.
 ignore = ["E501"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+# Imports are absolute (from engine.x import y), never relative (from ..x import y).
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+# Keep the standard-library / third-party / first-party ordering, but no blank
+# lines between the groups — one contiguous import block.
+no-lines-before = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
 
 [tool.ruff.format]
 # Respect the magic trailing comma so exploded signatures stay one-per-line.

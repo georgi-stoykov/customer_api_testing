@@ -1,10 +1,8 @@
 from decimal import Decimal
 from enum import StrEnum
-
 from pydantic import Field
-
-from ...constants.currencies import Currency
-from .common import ApiModel
+from engine.constants.currencies import Currency
+from engine.wallet_payments_api.models.common import ApiModel
 
 DEFAULT_QUOTE_REFERENCE = "conversion-test"
 

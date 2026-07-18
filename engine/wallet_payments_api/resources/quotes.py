@@ -1,7 +1,6 @@
 from http import HTTPMethod, HTTPStatus
-
-from ...base import BaseClient, endpoint
-from ..models.quotes import Quote, QuoteCreateRequest
+from engine.base_client import BaseClient, endpoint
+from engine.wallet_payments_api.models.quotes import Quote, QuoteCreateRequest
 
 QUOTES = "/api/v1/quote"
 QUOTE = "/api/v1/quote/{uuid}"

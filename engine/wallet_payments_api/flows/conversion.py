@@ -1,10 +1,9 @@
 import time
 from decimal import Decimal
-
-from ..api.models.quotes import PaymentStatus, Quote, QuoteCreateRequest
-from ..client import ApiClient
-from ..constants import settings
-from ..constants.currencies import Currency
+from engine.constants import settings
+from engine.constants.currencies import Currency
+from engine.wallet_payments_api.client import ApiClient
+from engine.wallet_payments_api.models.quotes import PaymentStatus, Quote, QuoteCreateRequest
 
 
 def wait_for_settlement(

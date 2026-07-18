@@ -18,8 +18,10 @@ ruff format engine tests
 
 ## Rules
 
-- **Imports** are grouped standard-library / third-party / first-party, one blank line between
-  groups (Ruff's isort). Do not collapse the blank lines.
+- **Imports** are **absolute** (`from engine.x import y`), never relative — enforced by Ruff
+  `TID252` (`ban-relative-imports = "all"`). They keep the standard-library / third-party /
+  first-party ordering but with **no blank lines between the groups** — one contiguous block
+  (Ruff's isort `no-lines-before`).
 - **Signatures with two or more parameters beyond `self`** are written one per line, ending with a
   magic trailing comma so Ruff keeps them exploded. Single-payload signatures (e.g.
   `get(self, uuid)`) stay on one line.

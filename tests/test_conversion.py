@@ -1,5 +1,5 @@
 from engine.constants.currencies import Currency
-from engine.flows import convert
+from engine.wallet_payments_api.flows import convert
 
 
 def test_eth_to_trx_settles_with_exact_deltas(api):

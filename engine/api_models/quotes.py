@@ -36,14 +36,35 @@ class QuoteCreateRequest(ApiModel):
     pay_out_method: PayMethod = Field(default=PayMethod.WALLET, alias="payOutMethod")
 
 
+class WalletRef(ApiModel):
+    id: int
+
+
+class QuoteFeeValues(ApiModel):
+    service: Decimal
+
+
+class QuoteFees(ApiModel):
+    value: QuoteFeeValues
+
+
 class Quote(ApiModel):
     uuid: str
     id: int
-    from_: str = Field(alias="from")
-    to: str
+    from_: Currency = Field(alias="from")
+    to: Currency
     amount_in: Decimal = Field(alias="amountIn")
+    amount_in_gross: Decimal = Field(alias="amountInGross")
+    amount_in_net: Decimal = Field(alias="amountInNet")
+    amount_due: Decimal = Field(alias="amountDue")
     amount_out: Decimal = Field(alias="amountOut")
     price: Decimal
+    net_price: Decimal = Field(alias="netPrice")
+    gross_price: Decimal = Field(alias="grossPrice")
     fee: Decimal
+    processing_fee: Decimal = Field(alias="processingFee")
+    fees: QuoteFees
+    use_pay_in_method: WalletRef = Field(alias="usePayInMethod")
+    use_pay_out_method: WalletRef = Field(alias="usePayOutMethod")
     quote_status: QuoteStatus = Field(alias="quoteStatus")
     payment_status: PaymentStatus = Field(alias="paymentStatus")

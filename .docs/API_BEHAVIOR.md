@@ -91,6 +91,9 @@ rounds the published fields **independently**:
 
 - `price` → rounded to the currency's `pricePrecision` (8 dp for all three currencies);
   `netPrice` and `grossPrice` are the **same rounded value**, not the internal rate.
+  `price` is a pair-level rate, and **which side's `pricePrecision` governs it is unverifiable**
+  while every currency uses 8 dp — the asserter assumes the **target** side. Revisit if a
+  currency with a different `pricePrecision` ever appears.
 - `amountOut` → computed from the *internal* rate, rounded to the **target** currency's
   `quantityPrecision` (ROUND_HALF_UP).
 - `fee` → exact: `amountIn × 0.0001` at the source currency's `quantityPrecision`.
@@ -134,6 +137,13 @@ At settlement the wallet deltas are exact:
 - **source** wallet balance: `− amountIn` (the whole input, fee included)
 - **target** wallet balance: `+ amountOut`
 
+Lifecycle-dependent quote fields (probed across create → accept → settle):
+- `amountDue` — the **outstanding** amount, not an echo of `amountIn`: equals `amountIn`
+  while `PENDING`/`ACCEPTED`, drops to `"0"` at settlement.
+- `amountInNet` / `amountInGross` — **both equal `amountIn` at every stage**. `amountInNet`
+  does **not** subtract the service fee (the fee is only reflected in `amountOut`); plausibly
+  it is net of the *processing* fee, which is `0` in all observed trades — unverifiable.
+
 Other timing facts:
 - `acceptanceExpiryDate` ≈ create time + **20s** (the quote-accept window from the PDF).
 - `paymentExpiryDate` ≈ create time + **~6 min** (separate, longer payment window).
@@ -155,3 +165,20 @@ Other timing facts:
 object with `.code`, `.name`, `.fiat`, precision, protocols), `id`, `status`, `address`.
 In observed trades `balance` and `available` moved together; pick `balance` for delta
 assertions unless a test specifically targets the available/pending distinction.
+
+Probed invariants (single account, before vs. after a settled conversion):
+- `approxBalance` / `approxAvailable` **mirror `balance` / `available` exactly** (identical
+  strings), including after settlement — "approx" is not rounded or lagged in the simulator.
+- `address` (simulated blockchain address, `simulated-address-<n>`) and `lsid` are **stable
+  across conversions** within an account; addresses differ between accounts (each `/init`
+  provisions fresh wallets).
+
+### ⚠️ Potential issue (unconfirmed) — `convertedAvailable` / `approxConvertedAvailable`
+
+Both read `"10000"` on **every** wallet in **every** capture, before and after conversion,
+regardless of the wallet's actual balance. A fiat-equivalent value that never reflects
+balance changes is **suspected simulator misbehaviour** — a real API would recompute it —
+but it could also be an intentional stub. **Needs confirmation with the API owner** before
+it can be classified as a bug or asserted as a contract. Left unmodeled and unasserted
+until then; once confirmed as computed, it belongs in the wallet-impact assertions
+(presumably as `balance × <some fiat rate>`-style bounds).

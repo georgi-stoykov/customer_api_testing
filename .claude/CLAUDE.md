@@ -149,3 +149,27 @@ root pieces.
   (timeout ~30s) BEFORE asserting balances.
 - **Fee math:** `fee = amountIn × 0.0001` (0.01%, in source currency);
   `amountOut = (amountIn − fee) × price`.
+- **A settled conversion asserts the account's total impact**, via
+  `ConversionAsserter.assert_settled_conversion`:
+  - **Both `balance` AND `available`** move by exactly `amountIn` (source) / `amountOut`
+    (target) — settlement must release reservations, not just move balance.
+  - **Wallet set is stable:** wallet count unchanged; every wallet keeps its `id` and
+    `address` and stays `ACTIVE`; uninvolved wallets keep `balance`/`available` untouched.
+  - **`approxBalance`/`approxAvailable` mirror `balance`/`available` exactly** (probed:
+    not rounded or lagged, even post-settlement) — asserted on every wallet in both
+    snapshots.
+  - **Potential issue (unconfirmed):** `convertedAvailable`/`approxConvertedAvailable` are
+    a static `"10000"` on every wallet in every observed capture, never reflecting balance
+    changes — suspected simulator misbehaviour, to be confirmed with the API owner.
+    Unmodeled and unasserted until confirmed (details in `.docs/API_BEHAVIOR.md`).
+    `AccountWallets.by_currency` raises on zero OR multiple matches (a duplicate-currency
+    wallet must fail loudly, never a silent first-match).
+  - **Quote echoes the request:** `from`/`to`/`amountIn` plus the requested wallet ids
+    (`usePayInMethod.id`/`usePayOutMethod.id` == `fromWallet`/`toWallet`).
+  - **Settled-quote consistency (exact):** `amountInGross == amountInNet == amountIn`
+    (`amountInNet` does NOT subtract the service fee), `amountDue == 0` (it is the
+    *outstanding* amount — equals `amountIn` until settlement), `fees.value.service == fee`,
+    `processingFee == 0`, `netPrice == grossPrice == price`.
+- **`price` is a pair-level rate; the asserter assumes the *target* currency's
+  `pricePrecision`** for the `amountOut` bound — unverifiable while all currencies use 8 dp
+  (noted in `.docs/API_BEHAVIOR.md`).

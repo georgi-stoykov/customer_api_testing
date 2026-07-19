@@ -4,12 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
-  # Daily heartbeat against the live API from main, at 10:00 Sofia year-round.
-  # Cron is UTC and DST-blind, so both candidate hours fire and the
-  # schedule_gate job lets through only the one that is 10:00 local.
+  # Daily heartbeat against the live API from main. Cron is UTC and DST-blind,
+  # so the local hour drifts: 10:00 Europe/Sofia in summer, 09:00 in winter.
+  # A heartbeat has no consumer of the exact hour, so the drift is accepted
+  # rather than filtered by a gate job.
   schedule:
     - cron: "0 7 * * *"
-    - cron: "0 8 * * *"
   workflow_dispatch:
 
 # One run per ref; superseded PR runs are cancelled, main runs never are
@@ -19,21 +19,6 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  # Gate 0 — DST filter for the doubled cron: only the firing that lands on
-  # 10:00 Europe/Sofia proceeds; every non-schedule trigger passes through.
-  schedule_gate:
-    runs-on: ubuntu-latest
-    outputs:
-      run: ${{ steps.check.outputs.run }}
-    steps:
-      - id: check
-        run: |
-          if [ "${{ github.event_name }}" != "schedule" ] || [ "$(TZ=Europe/Sofia date +%H)" = "10" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
-
   # Gate 1 — "build" + static checks: deps install, style/lint clean, every
   # module imports and every test collects. No build backend exists (test suite,
   # not a package), so install + collect-only IS the build check. Needs no
@@ -41,12 +26,10 @@ jobs:
   # requirement; collection makes no HTTP calls.
   code_analysis:
     name: code analysis
-    needs: schedule_gate
-    if: needs.schedule_gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
           cache: pip
@@ -72,8 +55,8 @@ jobs:
       SETTLEMENT_TIMEOUT: ${{ vars.SETTLEMENT_TIMEOUT }}
       SETTLEMENT_POLL_INTERVAL: ${{ vars.SETTLEMENT_POLL_INTERVAL }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
           cache: pip
@@ -81,7 +64,7 @@ jobs:
       # --allure-no-capture keeps captured logging/stdout out of the published
       # report — the report is world-readable and logs mention request lines.
       - run: pytest tests/smoke --alluredir=allure-results --allure-no-capture
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: allure-results-smoke
@@ -97,14 +80,14 @@ jobs:
       SETTLEMENT_TIMEOUT: ${{ vars.SETTLEMENT_TIMEOUT }}
       SETTLEMENT_POLL_INTERVAL: ${{ vars.SETTLEMENT_POLL_INTERVAL }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
           cache: pip
       - run: pip install -r requirements.txt
       - run: pytest tests/e2e --alluredir=allure-results --allure-no-capture
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: allure-results-e2e
@@ -120,7 +103,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: allure-results-*
           path: allure-results
@@ -128,7 +111,7 @@ jobs:
       # Prior reports feed Allure's trend/history widgets. The gh-pages branch
       # is bootstrapped once (empty orphan commit); a missing branch fails loudly
       # here rather than poisoning the publish dir with a half-initialized .git.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: gh-pages
           path: gh-pages
@@ -139,7 +122,7 @@ jobs:
           allure_report: allure-report
           allure_history: allure-history
           keep_reports: 25
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: allure-report
           path: allure-history

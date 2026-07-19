@@ -210,13 +210,12 @@ root pieces.
 
 - **Gated pipeline in `.github/workflows/ci.yml`:** `code analysis` → `smoke` → `e2e` →
   `report`, chained with `needs:`. Triggers: push to main, PRs (and pushes to them), a daily
-  schedule at **10:00 Europe/Sofia year-round** (cron is DST-blind, so two UTC crons fire —
-  07:00 and 08:00 — and the `schedule_gate` job passes only the one that is 10:00 local; the
-  other ends as an all-skipped run), and manual dispatch. The gate runs on every trigger, not
-  just schedules: GitHub expressions have no date/timezone functions, so the DST check needs a
-  shell — and gating steps *inside* a job instead would report a green "success" for a run that
-  tested nothing. Scheduled runs deploy the root report exactly like main pushes.
-  `code analysis` = Ruff (`check` + `format --check`) plus the build gate
+  heartbeat schedule (one UTC cron, `0 7 * * *`), and manual dispatch. **The heartbeat's local
+  hour drifts** — 10:00 Europe/Sofia in summer, 09:00 in winter — because cron is UTC and
+  DST-blind. The drift is accepted, not corrected: nothing consumes the exact hour, and pinning
+  it would cost a gate job on every run (GitHub expressions have no date/timezone functions, so
+  a DST check needs a shell, hence a job). Scheduled runs deploy the root report exactly like
+  main pushes. `code analysis` = Ruff (`check` + `format --check`) plus the build gate
   (`pytest --collect-only` with a placeholder `API_BASE_URL` — there is no build backend, so
   install + collect IS the build). `smoke` = liveness gate (`pytest tests/smoke`); `e2e` =
   `pytest tests/e2e`. No CodeQL — evaluated and removed as too heavy for this repo's needs.

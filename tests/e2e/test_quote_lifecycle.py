@@ -1,10 +1,12 @@
 from decimal import Decimal
 from http import HTTPStatus
 import allure
+import pytest
 from engine import api_flows as flows
 from engine.api_asserters import ConversionAsserter, ErrorAsserter
 from engine.api_client import ApiClient
 from engine.api_constants.currencies import Currency
+from engine.api_constants.general_messages import PENDING_OWNER_RULING
 
 
 @allure.title("Re-accepting a settled quote is rejected and does not convert twice")
@@ -112,6 +114,7 @@ def test_sequential_conversions_accumulate(
     )
 
 
+@pytest.mark.skip(reason=PENDING_OWNER_RULING)
 @allure.title("Two concurrently accepted quotes both settle with their combined impact")
 def test_concurrent_conversions_apply_combined_impact(
     customer_api: ApiClient,

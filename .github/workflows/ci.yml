@@ -4,34 +4,16 @@ on:
   push:
     branches: [main]
   pull_request:
-  # Daily heartbeat against the live API from main, at 10:00 Europe/Sofia.
-  # Cron is UTC and DST-blind, so the offset is baked into the month field
-  # instead: Sofia is UTC+3 (EEST) in summer and UTC+2 (EET) in winter. The two
-  # month ranges are disjoint — exactly one cron fires on any given day, so no
-  # gate job and no all-skipped runs.
-  #   Apr-Oct  07:00 UTC = 10:00 EEST
-  #   Nov-Mar  08:00 UTC = 10:00 EET
-  # EU DST actually turns on the last Sunday of March and off the last Sunday
-  # of October, so the days between each switch and the month boundary fire an
-  # hour off: 11:00 in late March, 09:00 in late October, ~10 days a year.
-  # Acceptable for a heartbeat; correcting it is what the gate job used to cost.
   schedule:
     - cron: "0 7 * 4-10 *"
     - cron: "0 8 * 1-3,11,12 *"
   workflow_dispatch:
 
-# One run per ref; superseded PR runs are cancelled, main runs never are
-# (each main run must publish its report into the gh-pages history).
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  # Gate 1 — "build" + static checks: deps install, style/lint clean, every
-  # module imports and every test collects. No build backend exists (test suite,
-  # not a package), so install + collect-only IS the build check. Needs no
-  # secrets: the placeholder satisfies settings.py's import-time API_BASE_URL
-  # requirement; collection makes no HTTP calls.
   code_analysis:
     name: code analysis
     runs-on: ubuntu-latest
@@ -48,17 +30,11 @@ jobs:
         env:
           API_BASE_URL: https://build-check.invalid
 
-  # Gate 2 — service liveness: /health + authenticated /echo must answer before
-  # the slow E2E suite spends minutes against a dead or broken host.
   smoke:
     needs: code_analysis
     runs-on: ubuntu-latest
     env:
-      # Host is sensitive -> GitHub Actions secret.
       API_BASE_URL: ${{ secrets.API_BASE_URL }}
-      # Tunable knobs -> GitHub Actions repository variables. Change them in the
-      # GitHub UI (Settings -> Secrets and variables -> Actions -> Variables);
-      # no PR needed. Unset falls back to the code defaults.
       REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT }}
       SETTLEMENT_TIMEOUT: ${{ vars.SETTLEMENT_TIMEOUT }}
       SETTLEMENT_POLL_INTERVAL: ${{ vars.SETTLEMENT_POLL_INTERVAL }}
@@ -69,8 +45,6 @@ jobs:
           python-version: "3.13"
           cache: pip
       - run: pip install -r requirements.txt
-      # --allure-no-capture keeps captured logging/stdout out of the published
-      # report — the report is world-readable and logs mention request lines.
       - run: pytest tests/smoke --alluredir=allure-results --allure-no-capture
       - uses: actions/upload-artifact@v7
         if: always()
@@ -78,7 +52,26 @@ jobs:
           name: allure-results-smoke
           path: allure-results
 
-  # Gate 3 — the E2E suite.
+  integration:
+    needs: smoke
+    runs-on: ubuntu-latest
+    env:
+      API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: pytest tests/integration --alluredir=allure-results --allure-no-capture
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: allure-results-integration
+          path: allure-results
+
   e2e:
     needs: smoke
     runs-on: ubuntu-latest
@@ -101,11 +94,8 @@ jobs:
           name: allure-results-e2e
           path: allure-results
 
-  # Publish — builds the Allure report from whatever results exist (failures
-  # included; a red run's report is the one you want to read). Deploys to
-  # gh-pages only on main pushes; PR runs get the report as an artifact.
   report:
-    needs: [smoke, e2e]
+    needs: [smoke, integration, e2e]
     if: always() && needs.smoke.result != 'skipped'
     runs-on: ubuntu-latest
     permissions:
@@ -116,9 +106,6 @@ jobs:
           pattern: allure-results-*
           path: allure-results
           merge-multiple: true
-      # Prior reports feed Allure's trend/history widgets. The gh-pages branch
-      # is bootstrapped once (empty orphan commit); a missing branch fails loudly
-      # here rather than poisoning the publish dir with a half-initialized .git.
       - uses: actions/checkout@v7
         with:
           ref: gh-pages
@@ -141,10 +128,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: allure-history
-      # PR preview: this run's standalone report (allure-history/<run_number> is a
-      # complete report) goes to pr-<PR>/ on the same Pages site; main's root and
-      # trend history stay untouched. keep_files guards the rest of the branch.
-      # Fork PRs are excluded — their GITHUB_TOKEN cannot push.
       - name: Deploy PR report preview to GitHub Pages
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: peaceiris/actions-gh-pages@v4
@@ -157,7 +140,6 @@ jobs:
       - name: Link the report in the run summary
         if: always()
         run: |
-          # github.event.repository is absent on schedule events — use the env var.
           PAGES="https://${{ github.repository_owner }}.github.io/${GITHUB_REPOSITORY#*/}"
           if { [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "schedule" ]; } && [ "${{ github.ref }}" = "refs/heads/main" ]; then
             {

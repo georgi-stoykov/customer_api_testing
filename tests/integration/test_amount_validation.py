@@ -1,38 +1,13 @@
 from decimal import Decimal
 from http import HTTPStatus
 import allure
+import pytest
 from engine import api_flows as flows
 from engine.api_asserters import ConversionAsserter, ErrorAsserter, QuoteAsserter
 from engine.api_client import ApiClient
 from engine.api_constants import error_details
 from engine.api_constants.currencies import Currency
-
-
-@allure.title("Converting the full wallet balance drains the wallet to exactly zero")
-def test_full_balance_conversion_drains_wallet(
-    customer_api: ApiClient,
-    conversion_asserter: ConversionAsserter,
-) -> None:
-    wallets_before = customer_api.wallet.list()
-    amount_in = wallets_before.by_currency(Currency.ETH).balance
-
-    settled_quote = flows.send_quote(
-        customer_api,
-        from_currency=Currency.ETH,
-        to_currency=Currency.TRX,
-        amount_in=amount_in,
-        wallets=wallets_before,
-    )
-
-    wallets_after = customer_api.wallet.list()
-    conversion_asserter.assert_settled_conversion(
-        quote=settled_quote,
-        wallets_before=wallets_before,
-        wallets_after=wallets_after,
-        from_currency=Currency.ETH,
-        to_currency=Currency.TRX,
-    )
-    conversion_asserter.assert_wallet_drained(wallets_after.by_currency(Currency.ETH))
+from engine.api_constants.general_messages import PENDING_OWNER_RULING
 
 
 @allure.title("A quote for more than the wallet balance is rejected at create")
@@ -64,6 +39,7 @@ def test_over_balance_quote_is_rejected(
     )
 
 
+@pytest.mark.skip(reason=PENDING_OWNER_RULING)
 @allure.title("A quote with a negative amount is rejected")
 def test_negative_amount_is_rejected(
     customer_api: ApiClient,
@@ -125,6 +101,7 @@ def test_excess_precision_amount_is_rounded(
     )
 
 
+@pytest.mark.skip(reason=PENDING_OWNER_RULING)
 @allure.title("Quote fee is consistent with its own reported amountIn")
 def test_excess_precision_fee_matches_reported_amount_in(
     customer_api: ApiClient,

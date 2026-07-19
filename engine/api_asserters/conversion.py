@@ -1,18 +1,31 @@
+from collections.abc import Iterator
 from decimal import Decimal
 import allure
+from engine.api_asserters.quotes import QuoteAsserter
 from engine.api_constants.currencies import Currency
-from engine.api_constants.fees import CONVERSION_FEE_RATE
-from engine.api_models.quotes import PaymentStatus, Quote, QuoteStatus
-from engine.api_models.wallets import AccountWallets, Wallet, WalletCurrency, WalletStatus
+from engine.api_models.quotes import Quote
+from engine.api_models.wallets import CustomerWallets, Wallet, WalletStatus
 from engine.utils import checks, monetary
 
 
 class ConversionAsserter:
+    def __init__(self) -> None:
+        self._quote_asserter = QuoteAsserter()
+
+    @staticmethod
+    def _paired_wallets(
+        wallets_before: CustomerWallets,
+        wallets_after: CustomerWallets,
+    ) -> Iterator[tuple[Wallet, Wallet]]:
+        for wallet_before in wallets_before:
+            yield wallet_before, wallets_after.by_id(wallet_before.id)
+
     @allure.step("Source/target wallet balance+available move by exactly amountIn/amountOut")
     def assert_wallet_deltas(
         self,
         *,
-        quote: Quote,
+        amount_in: Decimal,
+        amount_out: Decimal,
         source_before: Wallet,
         source_after: Wallet,
         target_before: Wallet,
@@ -20,118 +33,31 @@ class ConversionAsserter:
     ) -> None:
         monetary.assert_equal(
             actual=source_before.balance - source_after.balance,
-            expected=quote.amount_in,
+            expected=amount_in,
             context=f"source wallet balance delta ({source_before.currency.code})",
         )
         monetary.assert_equal(
             actual=source_before.available - source_after.available,
-            expected=quote.amount_in,
+            expected=amount_in,
             context=f"source wallet available delta ({source_before.currency.code})",
         )
         monetary.assert_equal(
             actual=target_after.balance - target_before.balance,
-            expected=quote.amount_out,
+            expected=amount_out,
             context=f"target wallet balance delta ({target_before.currency.code})",
         )
         monetary.assert_equal(
             actual=target_after.available - target_before.available,
-            expected=quote.amount_out,
+            expected=amount_out,
             context=f"target wallet available delta ({target_before.currency.code})",
-        )
-
-    @allure.step("Fee and amountOut follow the conversion math")
-    def assert_conversion_math(
-        self,
-        *,
-        quote: Quote,
-        source_currency: WalletCurrency,
-        target_currency: WalletCurrency,
-    ) -> None:
-        expected_fee = monetary.round_half_up(
-            quote.amount_in * CONVERSION_FEE_RATE,
-            source_currency.quantity_precision,
-        )
-        monetary.assert_equal(
-            actual=quote.fee,
-            expected=expected_fee,
-            context=f"fee = amountIn x {CONVERSION_FEE_RATE} ({source_currency.code})",
-        )
-        # price is a pair-level rate; which side's pricePrecision bounds it is unverifiable
-        # while every simulator currency uses 8 dp — the target side is assumed.
-        net_amount_in = quote.amount_in - quote.fee
-        expected_amount_out = net_amount_in * quote.price
-        price_rounding_error = net_amount_in * monetary.rounding_tolerance(
-            target_currency.price_precision
-        )
-        amount_out_rounding_error = monetary.rounding_tolerance(target_currency.quantity_precision)
-        monetary.assert_equal_with_tolerance(
-            actual=quote.amount_out,
-            expected=expected_amount_out,
-            tolerance=price_rounding_error + amount_out_rounding_error,
-            context=f"amountOut = (amountIn - fee) x price ({target_currency.code})",
-        )
-
-    @allure.step("Quote echoes the requested pair, amount, and wallet ids")
-    def assert_quote_echoes_request(
-        self,
-        *,
-        quote: Quote,
-        from_currency: Currency,
-        to_currency: Currency,
-        amount_in: Decimal,
-        source_wallet_id: int,
-        target_wallet_id: int,
-    ) -> None:
-        checks.assert_equal(actual=quote.from_, expected=from_currency, context="quote from")
-        checks.assert_equal(actual=quote.to, expected=to_currency, context="quote to")
-        monetary.assert_equal(
-            actual=quote.amount_in,
-            expected=amount_in,
-            context="quote amountIn vs requested amount",
-        )
-        checks.assert_equal(
-            actual=quote.use_pay_in_method.id,
-            expected=source_wallet_id,
-            context="quote usePayInMethod wallet id",
-        )
-        checks.assert_equal(
-            actual=quote.use_pay_out_method.id,
-            expected=target_wallet_id,
-            context="quote usePayOutMethod wallet id",
-        )
-
-    @allure.step("Settled quote's reported numbers are self-consistent")
-    def assert_settled_quote_consistency(self, quote: Quote) -> None:
-        for actual, expected, context in (
-            (quote.amount_in_gross, quote.amount_in, "quote amountInGross vs amountIn"),
-            (quote.amount_in_net, quote.amount_in, "quote amountInNet vs amountIn"),
-            (quote.amount_due, Decimal("0"), "quote amountDue after settlement"),
-            (quote.fees.value.service, quote.fee, "quote fees.value.service vs fee"),
-            (quote.processing_fee, Decimal("0"), "quote processingFee"),
-            (quote.net_price, quote.price, "quote netPrice vs price"),
-            (quote.gross_price, quote.price, "quote grossPrice vs price"),
-        ):
-            monetary.assert_equal(actual=actual, expected=expected, context=context)
-
-    @allure.step("Quote reached settled statuses")
-    def assert_quote_settled(self, quote: Quote) -> None:
-        checks.assert_equal(
-            actual=quote.quote_status,
-            expected=QuoteStatus.PAYMENT_OUT_PROCESSED,
-            context="quoteStatus",
-        )
-        checks.assert_equal(
-            actual=quote.payment_status,
-            expected=PaymentStatus.SUCCESS,
-            context="paymentStatus",
         )
 
     @allure.step("Wallet count unchanged")
     def assert_wallet_count_unchanged(
         self,
         *,
-        wallets_before: AccountWallets,
-        wallets_after: AccountWallets,
+        wallets_before: CustomerWallets,
+        wallets_after: CustomerWallets,
     ) -> None:
         checks.assert_equal(
             actual=len(wallets_after),
@@ -209,38 +135,20 @@ class ConversionAsserter:
         monetary.assert_equal(
             actual=wallet.balance,
             expected=Decimal("0"),
-            context=f"{wallet.label} balance after converting the full balance",
+            context=f"{wallet.label} balance",
         )
         monetary.assert_equal(
             actual=wallet.available,
             expected=Decimal("0"),
-            context=f"{wallet.label} available after converting the full balance",
+            context=f"{wallet.label} available",
         )
 
-    @allure.step("Quote amountIn is the requested amount rounded to the source quantityPrecision")
-    def assert_amount_in_rounding(
+    @allure.step("Customer wallets are unchanged")
+    def assert_wallets_unchanged(
         self,
         *,
-        quote: Quote,
-        requested_amount_in: Decimal,
-        source_currency: WalletCurrency,
-    ) -> None:
-        expected_amount_in = monetary.round_half_up(
-            requested_amount_in,
-            source_currency.quantity_precision,
-        )
-        monetary.assert_equal(
-            actual=quote.amount_in,
-            expected=expected_amount_in,
-            context=f"quote amountIn rounded to {source_currency.code} quantityPrecision",
-        )
-
-    @allure.step("Account wallets are unchanged")
-    def assert_account_unchanged(
-        self,
-        *,
-        wallets_before: AccountWallets,
-        wallets_after: AccountWallets,
+        wallets_before: CustomerWallets,
+        wallets_after: CustomerWallets,
     ) -> None:
         soft = checks.SoftAssertions()
         with soft:
@@ -248,8 +156,7 @@ class ConversionAsserter:
                 wallets_before=wallets_before,
                 wallets_after=wallets_after,
             )
-        for wallet_before in wallets_before:
-            wallet_after = wallets_after.by_id(wallet_before.id)
+        for wallet_before, wallet_after in self._paired_wallets(wallets_before, wallets_after):
             with soft:
                 self.assert_wallets_equal(
                     expected_wallet=wallet_before,
@@ -262,38 +169,29 @@ class ConversionAsserter:
         self,
         *,
         quotes: list[Quote],
-        wallets_before: AccountWallets,
-        wallets_after: AccountWallets,
+        wallets_before: CustomerWallets,
+        wallets_after: CustomerWallets,
         from_currency: Currency,
         to_currency: Currency,
     ) -> None:
-        total_amount_in = sum((quote.amount_in for quote in quotes), Decimal("0"))
-        total_amount_out = sum((quote.amount_out for quote in quotes), Decimal("0"))
-        source_before = wallets_before.by_currency(from_currency)
-        source_after = wallets_after.by_currency(from_currency)
-        target_before = wallets_before.by_currency(to_currency)
-        target_after = wallets_after.by_currency(to_currency)
-        monetary.assert_equal(
-            actual=source_before.balance - source_after.balance,
-            expected=total_amount_in,
-            context=f"source wallet balance delta vs {len(quotes)} settled amountIns",
-        )
-        monetary.assert_equal(
-            actual=target_after.balance - target_before.balance,
-            expected=total_amount_out,
-            context=f"target wallet balance delta vs {len(quotes)} settled amountOuts",
+        self.assert_wallet_deltas(
+            amount_in=sum((quote.amount_in for quote in quotes), Decimal("0")),
+            amount_out=sum((quote.amount_out for quote in quotes), Decimal("0")),
+            source_before=wallets_before.by_currency(from_currency),
+            source_after=wallets_after.by_currency(from_currency),
+            target_before=wallets_before.by_currency(to_currency),
+            target_after=wallets_after.by_currency(to_currency),
         )
 
-    @allure.step("Settled conversion: full account impact is correct")
+    @allure.step("Settled conversion: full customer impact is correct")
     def assert_settled_conversion(
         self,
         *,
         quote: Quote,
-        wallets_before: AccountWallets,
-        wallets_after: AccountWallets,
+        wallets_before: CustomerWallets,
+        wallets_after: CustomerWallets,
         from_currency: Currency,
         to_currency: Currency,
-        amount_in: Decimal,
     ) -> None:
         source_before = wallets_before.by_currency(from_currency)
         source_after = wallets_after.by_currency(from_currency)
@@ -301,24 +199,7 @@ class ConversionAsserter:
         target_after = wallets_after.by_currency(to_currency)
         soft = checks.SoftAssertions()
         with soft:
-            self.assert_quote_echoes_request(
-                quote=quote,
-                from_currency=from_currency,
-                to_currency=to_currency,
-                amount_in=amount_in,
-                source_wallet_id=source_before.id,
-                target_wallet_id=target_before.id,
-            )
-        with soft:
-            self.assert_quote_settled(quote)
-        with soft:
-            self.assert_settled_quote_consistency(quote)
-        with soft:
-            self.assert_conversion_math(
-                quote=quote,
-                source_currency=source_after.currency,
-                target_currency=target_after.currency,
-            )
+            self._quote_asserter.assert_quote_settled(quote)
         with soft:
             self.assert_wallet_count_unchanged(
                 wallets_before=wallets_before,
@@ -326,14 +207,14 @@ class ConversionAsserter:
             )
         with soft:
             self.assert_wallet_deltas(
-                quote=quote,
+                amount_in=quote.amount_in,
+                amount_out=quote.amount_out,
                 source_before=source_before,
                 source_after=source_after,
                 target_before=target_before,
                 target_after=target_after,
             )
-        for wallet_before in wallets_before:
-            wallet_after = wallets_after.by_id(wallet_before.id)
+        for wallet_before, wallet_after in self._paired_wallets(wallets_before, wallets_after):
             with soft:
                 self.assert_wallet_identity(
                     expected_wallet=wallet_before,

@@ -16,13 +16,27 @@ class ErrorAsserter:
     ) -> None:
         checks.assert_equal(
             actual=response.status_code,
-            expected=int(expected_status),
+            expected=expected_status,
             context=f"{response.method} {response.path} status code",
         )
         if expected_detail is not None:
-            error = ErrorResponse.model_validate(response.json)
+            error = response.as_model(ErrorResponse)
             checks.assert_equal(
                 actual=error.detail,
                 expected=expected_detail,
                 context=f"{response.method} {response.path} error detail",
             )
+
+    @allure.step("Response is the generic {expected_status} error")
+    def assert_generic_error(
+        self,
+        response: ApiResponse,
+        *,
+        expected_status: HTTPStatus,
+    ) -> None:
+        # The simulator's generic rejections carry the HTTP reason phrase as their detail.
+        self.assert_error(
+            response,
+            expected_status=expected_status,
+            expected_detail=expected_status.phrase,
+        )

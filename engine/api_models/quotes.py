@@ -1,9 +1,8 @@
-from collections.abc import Iterator
 from decimal import Decimal
 from enum import StrEnum
-from pydantic import Field, RootModel
+from pydantic import Field
 from engine.api_constants.currencies import Currency
-from engine.api_models.common import ApiModel
+from engine.api_models.common import ApiModel, RootList
 
 DEFAULT_QUOTE_REFERENCE = "conversion-test"
 
@@ -29,7 +28,7 @@ class PayMethod(StrEnum):
 class QuoteCreateRequest(ApiModel):
     # Currencies are wire-typed (str, not the Currency enum) so negative tests can send
     # invalid codes through the same model; happy-path type safety lives on the flow
-    # signatures, which take Currency.
+    # signatures (Currency — create_quote also admits plain str for invalid-code tests).
     from_: str = Field(alias="from")
     to: str
     from_wallet: int = Field(alias="fromWallet")
@@ -76,17 +75,9 @@ class Quote(ApiModel):
     payment_status: PaymentStatus = Field(alias="paymentStatus")
 
 
-class AccountQuotes(RootModel[list[Quote]]):
+class CustomerQuotes(RootList[Quote]):
     def by_uuid(self, uuid: str) -> Quote:
-        matching_quotes = [quote for quote in self.root if quote.uuid == uuid]
-        if not matching_quotes:
-            raise KeyError(f"No quote with uuid {uuid!r}")
-        if len(matching_quotes) > 1:
-            raise ValueError(f"{len(matching_quotes)} quotes with uuid {uuid!r}, expected one")
-        return matching_quotes[0]
-
-    def __iter__(self) -> Iterator[Quote]:
-        return iter(self.root)
-
-    def __len__(self) -> int:
-        return len(self.root)
+        return self._single(
+            lambda quote: quote.uuid == uuid,
+            description=f"quote with uuid {uuid!r}",
+        )

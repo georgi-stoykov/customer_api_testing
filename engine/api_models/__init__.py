@@ -1,7 +1,7 @@
 from engine.api_models.common import ApiModel, ErrorResponse
 from engine.api_models.customer import InitResponse
 from engine.api_models.quotes import (
-    AccountQuotes,
+    CustomerQuotes,
     PaymentStatus,
     PayMethod,
     Quote,
@@ -9,7 +9,7 @@ from engine.api_models.quotes import (
     QuoteStatus,
 )
 from engine.api_models.system import EchoResponse, HealthResponse
-from engine.api_models.wallets import AccountWallets, Wallet, WalletCurrency
+from engine.api_models.wallets import CustomerWallets, Wallet, WalletCurrency
 
 __all__ = [
     "ApiModel",
@@ -19,11 +19,11 @@ __all__ = [
     "EchoResponse",
     "WalletCurrency",
     "Wallet",
-    "AccountWallets",
+    "CustomerWallets",
     "Quote",
     "QuoteCreateRequest",
     "QuoteStatus",
     "PaymentStatus",
     "PayMethod",
-    "AccountQuotes",
+    "CustomerQuotes",
 ]

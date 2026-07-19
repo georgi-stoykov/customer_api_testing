@@ -204,6 +204,86 @@ class ConversionAsserter:
             context=f"{wallet_context} available",
         )
 
+    @allure.step("Wallet is drained to exactly zero")
+    def assert_wallet_drained(self, wallet: Wallet) -> None:
+        monetary.assert_equal(
+            actual=wallet.balance,
+            expected=Decimal("0"),
+            context=f"{wallet.label} balance after converting the full balance",
+        )
+        monetary.assert_equal(
+            actual=wallet.available,
+            expected=Decimal("0"),
+            context=f"{wallet.label} available after converting the full balance",
+        )
+
+    @allure.step("Quote amountIn is the requested amount rounded to the source quantityPrecision")
+    def assert_amount_in_rounding(
+        self,
+        *,
+        quote: Quote,
+        requested_amount_in: Decimal,
+        source_currency: WalletCurrency,
+    ) -> None:
+        expected_amount_in = monetary.round_half_up(
+            requested_amount_in,
+            source_currency.quantity_precision,
+        )
+        monetary.assert_equal(
+            actual=quote.amount_in,
+            expected=expected_amount_in,
+            context=f"quote amountIn rounded to {source_currency.code} quantityPrecision",
+        )
+
+    @allure.step("Account wallets are unchanged")
+    def assert_account_unchanged(
+        self,
+        *,
+        wallets_before: AccountWallets,
+        wallets_after: AccountWallets,
+    ) -> None:
+        soft = checks.SoftAssertions()
+        with soft:
+            self.assert_wallet_count_unchanged(
+                wallets_before=wallets_before,
+                wallets_after=wallets_after,
+            )
+        for wallet_before in wallets_before:
+            wallet_after = wallets_after.by_id(wallet_before.id)
+            with soft:
+                self.assert_wallets_equal(
+                    expected_wallet=wallet_before,
+                    actual_wallet=wallet_after,
+                )
+        soft.assert_all()
+
+    @allure.step("Wallet deltas equal the combined impact of all settled conversions")
+    def assert_combined_conversion_deltas(
+        self,
+        *,
+        quotes: list[Quote],
+        wallets_before: AccountWallets,
+        wallets_after: AccountWallets,
+        from_currency: Currency,
+        to_currency: Currency,
+    ) -> None:
+        total_amount_in = sum((quote.amount_in for quote in quotes), Decimal("0"))
+        total_amount_out = sum((quote.amount_out for quote in quotes), Decimal("0"))
+        source_before = wallets_before.by_currency(from_currency)
+        source_after = wallets_after.by_currency(from_currency)
+        target_before = wallets_before.by_currency(to_currency)
+        target_after = wallets_after.by_currency(to_currency)
+        monetary.assert_equal(
+            actual=source_before.balance - source_after.balance,
+            expected=total_amount_in,
+            context=f"source wallet balance delta vs {len(quotes)} settled amountIns",
+        )
+        monetary.assert_equal(
+            actual=target_after.balance - target_before.balance,
+            expected=total_amount_out,
+            context=f"target wallet balance delta vs {len(quotes)} settled amountOuts",
+        )
+
     @allure.step("Settled conversion: full account impact is correct")
     def assert_settled_conversion(
         self,

@@ -95,7 +95,9 @@ rounds the published fields **independently**:
   currency with a different `pricePrecision` ever appears.
 - `amountOut` → computed from the *internal* rate, rounded to the **target** currency's
   `quantityPrecision` (ROUND_HALF_UP).
-- `fee` → exact: `amountIn × 0.0001` at the source currency's `quantityPrecision`.
+- `fee` → exact: `amountIn × 0.0001` at the source currency's `quantityPrecision` — but see
+  "Excess input precision" below: for inputs finer than `quantityPrecision`, the fee is
+  computed from the **unrounded** requested amount, not the quote's own echoed `amountIn`.
 
 Consequence: deriving `expected_amount_out = (amountIn − fee) × price` from the *reported* price
 carries an error of up to `(amountIn − fee) × 5e-9` (the max rounding error of an 8-dp price),
@@ -131,6 +133,15 @@ later. Balances are **not** updated at accept time.
 | after create | `PENDING` | `PENDING` | unchanged |
 | after accept (immediate) | `ACCEPTED` | `PROCESSING` | **unchanged** |
 | ~5–8s later (settled) | `PAYMENT_OUT_PROCESSED` | `SUCCESS` | **updated** |
+| >20s, never accepted | `EXPIRED` | `EXPIRED` | unchanged |
+
+Probed accept-path outcomes:
+- **Re-accepting** an already-accepted quote — while `PROCESSING` *or* after `SUCCESS` — returns
+  `400 {"detail": "Bad Request"}` and the conversion is applied **exactly once** (no double
+  spend on the re-accept path).
+- **Accepting an expired quote** returns `412 {"detail": "Precondition Failed"}`; the quote
+  stays `EXPIRED`/`EXPIRED` and balances stay untouched. The status flip to `EXPIRED` happens
+  server-side (observed on a plain GET ~25s after create, no accept attempt needed).
 
 At settlement the wallet deltas are exact:
 - **source** wallet balance: `− amountIn` (the whole input, fee included)
@@ -181,3 +192,90 @@ but it could also be an intentional stub. **Needs confirmation with the API owne
 it can be classified as a bug or asserted as a contract. Left unmodeled and unasserted
 until then; once confirmed as computed, it belongs in the wallet-impact assertions
 (presumably as `balance × <some fiat rate>`-style bounds).
+
+## Error contract (probed)
+
+Every error response is a single-field body `{"detail": "<message>"}`. Observed statuses:
+
+| Status | Trigger | `detail` |
+|---|---|---|
+| 400 | zero / missing / both `amountIn`+`amountOut` | `One of 'amountIn' or 'amountOut' must be specified but not both.` |
+| 400 | `from` currency ≠ source wallet's currency (incl. unknown codes like `XYZ`) | `Request to trade {from} for {to} but source wallet has currency {wallet currency}.` |
+| 400 | `fromWallet` id not visible to the account (another account's id, or bogus) | `Source wallet with ID #{id} not found.` |
+| 400 | re-accepting an accepted/settled quote | `Bad Request` |
+| 404 | GET/accept unknown quote uuid; GET unknown wallet id | `Not Found` |
+| 412 | `amountIn` exceeds source wallet `available` (checked at **create**) | `Insufficient funds available in source wallet #{id}.` |
+| 412 | accepting an expired quote | `Precondition Failed` |
+
+Notes:
+- **Zero `amountIn` is treated as "not specified"** (falsy), so the rejection message is the
+  misleading amountIn/amountOut one, not a "must be positive" validation — cosmetic quirk.
+- There is no dedicated currency whitelist error: an unknown `from` code surfaces as the
+  wallet-currency mismatch message.
+
+## Amount validation (probed)
+
+- **Insufficient funds are rejected at quote create** (`412`), checked against the source
+  wallet's `available`. Create/accept of an exact-full-balance amount works: the fee is
+  skimmed *inside* `amountIn`, and after settlement the source wallet lands on exactly `0`
+  (reported as `"0E-8"` — a zero `Decimal` at the currency's precision).
+- **Creating a quote reserves nothing**: after a pending quote for 0.5 of 3.7 ETH, both
+  `balance` and `available` still read the full 3.7. Multiple live quotes can therefore
+  collectively promise more than the balance (see the concurrency bug below).
+- **Excess input precision** (`amountIn` finer than the source `quantityPrecision`, e.g.
+  `0.123456789012` ETH): the quote's `amountIn` echo is rounded HALF_UP to
+  `quantityPrecision` (`0.12345679`), but **`fee` is computed from the unrounded requested
+  amount** (`0.0000123456789012`, 16 dp) — the quote is internally inconsistent
+  (`fee ≠ amountIn × 0.0001` for its own reported `amountIn`). Suspected bug; the fee
+  consistency test is `xfail`-documented.
+
+### ⚠️ Confirmed bug — negative `amountIn` settles in reverse
+
+`amountIn = -1` (ETH→TRX) is **accepted** (`201`) with negative `fee` and `amountOut`,
+accepts normally, and **settles**: the source wallet is *credited* `+1 ETH` and the target
+*debited* `-12350 TRX`. A negative amount effectively runs the conversion backwards at the
+forward rate and *earns* the fee — no validation anywhere in the lifecycle. The rejection
+test is `xfail`-documented until the simulator is fixed.
+
+## Request amount modes (probed)
+
+- `useMaximum: true` is a **no-op**: with `amountIn` present the flag is ignored; without
+  `amountIn` the request is rejected with the amountIn/amountOut 400. There is no working
+  "convert everything" mode. (Untested against `useMinimum`, presumed symmetric.)
+- **`amountOut`-only quotes are supported**: the API computes `amountIn` and returns
+  `price` as the *inverse* rate (source per unit of target, e.g. `0.00007957` ETH/TRX
+  instead of ~12500 TRX/ETH). `fee` comes back in scientific notation at full precision
+  (e.g. `7.956989247311827956989247313E-7`). Out of scope for Goal 3 — candidate for a
+  future test category.
+- Specifying **both** `amountIn` and `amountOut` → the same 400.
+
+### ⚠️ Confirmed bug — concurrent settlements lose updates
+
+Two quotes accepted back-to-back (~1s apart, both `SUCCESS` at the end) settle by applying
+their deltas to a **stale balance snapshot** — the last settlement wins and the first
+one's wallet impact vanishes (classic lost update). Observed with 2+2 ETH quotes on a
+3.7 ETH wallet: both quotes report `SUCCESS`/`amountDue: 0`, but final balances reflect
+only the second quote (`ETH 1.7`, one credit on TRX). This also silently masks the
+overdraw the two accepts should have produced. **Sequential** conversions (settle, then
+accept the next) accumulate correctly. The combined-deltas test is `xfail`-documented
+(non-strict — the race's determinism is unverified).
+
+## Transport — idle keep-alive sockets are dropped
+
+The host silently drops keep-alive connections left idle for ~10s+; the next request on
+the stale socket fails with a transport `ConnectionError` (observed: a single 15s
+`sleep` before an accept). Requests spaced ≤ the settlement poll interval never hit
+this. Any wait longer than a few seconds must **poll** (keeping the socket warm — see
+`flows.hold_quote` / `wait_for_expiry`), never sleep in one block.
+
+## Parity & identifiers (probed)
+
+- `GET /api/wallet/{id}` returns the identical object to that wallet's entry in
+  `GET /api/wallet`; the quote list `GET /api/v1/quote` is a **plain JSON array** of full
+  quote objects (no pagination wrapper), insertion-ordered.
+- A quote fetched immediately after create is **byte-identical** to the create response
+  (zero field drift while `PENDING`) — create-vs-get parity can compare all fields.
+- **Wallet ids are globally sequential across accounts** (one account got 550/551/552, the
+  next 553/554/555), so another account's id is a *real, existing* id — yet quote create
+  with it is properly rejected (`400 Source wallet ... not found.`) and the other account
+  is untouched: cross-account isolation holds.

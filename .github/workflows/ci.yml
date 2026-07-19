@@ -4,12 +4,20 @@ on:
   push:
     branches: [main]
   pull_request:
-  # Daily heartbeat against the live API from main. Cron is UTC and DST-blind,
-  # so the local hour drifts: 10:00 Europe/Sofia in summer, 09:00 in winter.
-  # A heartbeat has no consumer of the exact hour, so the drift is accepted
-  # rather than filtered by a gate job.
+  # Daily heartbeat against the live API from main, at 10:00 Europe/Sofia.
+  # Cron is UTC and DST-blind, so the offset is baked into the month field
+  # instead: Sofia is UTC+3 (EEST) in summer and UTC+2 (EET) in winter. The two
+  # month ranges are disjoint — exactly one cron fires on any given day, so no
+  # gate job and no all-skipped runs.
+  #   Apr-Oct  07:00 UTC = 10:00 EEST
+  #   Nov-Mar  08:00 UTC = 10:00 EET
+  # EU DST actually turns on the last Sunday of March and off the last Sunday
+  # of October, so the days between each switch and the month boundary fire an
+  # hour off: 11:00 in late March, 09:00 in late October, ~10 days a year.
+  # Acceptable for a heartbeat; correcting it is what the gate job used to cost.
   schedule:
-    - cron: "0 7 * * *"
+    - cron: "0 7 * 4-10 *"
+    - cron: "0 8 * 1-3,11,12 *"
   workflow_dispatch:
 
 # One run per ref; superseded PR runs are cancelled, main runs never are

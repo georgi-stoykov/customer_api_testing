@@ -210,12 +210,16 @@ root pieces.
 
 - **Gated pipeline in `.github/workflows/ci.yml`:** `code analysis` → `smoke` → `e2e` →
   `report`, chained with `needs:`. Triggers: push to main, PRs (and pushes to them), a daily
-  heartbeat schedule (one UTC cron, `0 7 * * *`), and manual dispatch. **The heartbeat's local
-  hour drifts** — 10:00 Europe/Sofia in summer, 09:00 in winter — because cron is UTC and
-  DST-blind. The drift is accepted, not corrected: nothing consumes the exact hour, and pinning
-  it would cost a gate job on every run (GitHub expressions have no date/timezone functions, so
-  a DST check needs a shell, hence a job). Scheduled runs deploy the root report exactly like
-  main pushes. `code analysis` = Ruff (`check` + `format --check`) plus the build gate
+  heartbeat schedule at **10:00 Europe/Sofia**, and manual dispatch. Cron is UTC and DST-blind,
+  so the offset is encoded in the **month field** of two disjoint crons — `0 7 * 4-10 *`
+  (UTC+3, summer) and `0 8 * 1-3,11,12 *` (UTC+2, winter). Exactly one fires per day, so this
+  costs no gate job and produces no all-skipped runs. The days between each DST switch (last
+  Sunday of March / October) and the month boundary fire an hour off — 11:00 in late March,
+  09:00 in late October, ~10 days a year — which is accepted rather than corrected: a heartbeat
+  has no consumer of the exact hour, and GitHub expressions have no date/timezone functions, so
+  pinning it exactly would require a shell, hence a whole gate job on every run. Scheduled runs
+  deploy the root report exactly like main pushes.
+  `code analysis` = Ruff (`check` + `format --check`) plus the build gate
   (`pytest --collect-only` with a placeholder `API_BASE_URL` — there is no build backend, so
   install + collect IS the build). `smoke` = liveness gate (`pytest tests/smoke`); `e2e` =
   `pytest tests/e2e`. No CodeQL — evaluated and removed as too heavy for this repo's needs.

@@ -126,15 +126,34 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: allure-history
+      # PR preview: this run's standalone report (allure-history/<run_number> is a
+      # complete report) goes to pr-<PR>/ on the same Pages site; main's root and
+      # trend history stay untouched. keep_files guards the rest of the branch.
+      # Fork PRs are excluded — their GITHUB_TOKEN cannot push.
+      - name: Deploy PR report preview to GitHub Pages
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: allure-history/${{ github.run_number }}
+          destination_dir: pr-${{ github.event.pull_request.number }}
+          keep_files: true
       - name: Link the report in the run summary
         if: always()
         run: |
+          PAGES="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
           if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
             {
               echo "### Allure report"
-              echo "This run: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ github.run_number }}/"
+              echo "This run: $PAGES/${{ github.run_number }}/"
               echo ""
-              echo "Latest: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+              echo "Latest: $PAGES/"
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            {
+              echo "### Allure report"
+              echo "PR preview: $PAGES/pr-${{ github.event.pull_request.number }}/"
             } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "### Allure report: download the \`allure-report\` artifact from this run" >> "$GITHUB_STEP_SUMMARY"

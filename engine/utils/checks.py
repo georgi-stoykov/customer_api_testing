@@ -12,7 +12,6 @@ def assert_equal(
 
 class SoftAssertions:
     """Collects assertion failures instead of stopping at the first one.
-
     Each `with soft:` block suppresses and records an AssertionError; other
     exception types propagate. `assert_all()` raises one combined failure.
     """

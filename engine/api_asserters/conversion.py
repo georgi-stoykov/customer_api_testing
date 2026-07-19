@@ -219,9 +219,6 @@ class ConversionAsserter:
         source_after = wallets_after.by_currency(from_currency)
         target_before = wallets_before.by_currency(to_currency)
         target_after = wallets_after.by_currency(to_currency)
-        # Soft: every atomic check runs and one combined failure reports them all.
-        # Only AssertionError is collected — structural errors (e.g. by_id on a
-        # vanished wallet) still abort immediately.
         soft = checks.SoftAssertions()
         with soft:
             self.assert_quote_echoes_request(

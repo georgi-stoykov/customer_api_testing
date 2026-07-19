@@ -215,8 +215,10 @@ root pieces.
   `pytest tests/e2e`. No CodeQL — evaluated and removed as too heavy for this repo's needs.
 - **Report publishing:** the `report` job runs even when tests fail, builds the Allure report
   with run history (`simple-elf/allure-report-action`), and deploys to GitHub Pages
-  (`gh-pages` branch) **only on pushes to `main`**; PR runs upload the report as the
-  `allure-report` artifact. The run summary links the report URL. The `gh-pages` branch was
+  (`gh-pages` branch): main pushes go to the site root (with trend history), PR runs go to
+  `pr-<PR>/` on the same site (standalone preview, no effect on root history; fork PRs
+  excluded — no token push rights). Every run also uploads the `allure-report` artifact.
+  The run summary links the applicable report URL. The `gh-pages` branch was
   bootstrapped once as an empty orphan commit — the report job requires it to exist (its
   checkout fails loudly rather than half-initializing the publish dir).
 - **The published report is world-readable — the API host must never appear in it.**

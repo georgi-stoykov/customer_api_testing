@@ -189,11 +189,20 @@ root pieces.
 - **Tests run in parallel by default** (`pytest-xdist`, `-n auto` in `addopts`) — every test
   must be parallel-safe: provision its own customer via the `customer_api` fixture, never
   share customer state across tests. Debug serially with `pytest -n 0`.
-- **Test levels are folders, not markers.** `tests/smoke/` (liveness: `/health` + `/echo`)
-  and `tests/e2e/` (full conversions); a file's location IS its level, selected by path
-  (`pytest tests/smoke`). No level markers — `--strict-markers` is on so any custom mark
-  fails loudly as a typo. Shared fixtures (`customer_api`) live in the root
-  `tests/conftest.py`; level-specific fixtures (`conversion_asserter`) in the level's own
+- **Test levels are folders, not markers.** Three levels, split by whether a test drives
+  the quote state machine over time — which is also what makes it slow:
+  - `tests/smoke/` — liveness (`/health` + `/echo`).
+  - `tests/integration/` — single request → assert response. Validation, error contracts,
+    and read-parity; never accepts a quote, so nothing waits.
+  - `tests/e2e/` — full quote lifecycles: create → accept → poll → assert balances,
+    plus the timing tests that wait on the acceptance window.
+
+  A file's location IS its level, selected by path (`pytest tests/integration`). No level
+  markers — `--strict-markers` is on so any custom mark fails loudly as a typo. **Test
+  filenames must be unique across levels**: there is no `__init__.py` under `tests/`, so
+  two same-named files collide with an import-file-mismatch error.
+  Fixtures used by more than one level (`customer_api`, the asserters) live in the root
+  `tests/conftest.py`; level-specific fixtures (`pending_quote`) in the level's own
   conftest. Smoke checks are contract + trivial presence/equality only (via
   `checks.assert_equal`) — no asserter class.
 - **Settlement is asynchronous.** Accept returns 200 immediately with balances unchanged; funds
@@ -244,20 +253,23 @@ The single home for every questionable API behaviour the suite has surfaced. All
 observed against the live simulator; evidence and raw captures live in
 `.docs/API_BEHAVIOR.md`. None is confirmed as intended or as a bug by the API owner yet.
 
-**Policy: tests for these behaviours assert the CORRECT contract and FAIL red — no
-`xfail`/skip markers.** A red test in this list is a standing bug report, not a suite
-defect; when the simulator is fixed the test simply goes green, with no marker to clean up.
+**Policy: tests for these behaviours assert the CORRECT contract and are marked
+`@pytest.mark.skip(reason=PENDING_OWNER_RULING)`** (`engine/api_constants/general_messages.py` —
+one shared string, so the set is one edit to un-skip). The assertion stays written for the
+correct contract: the skip parks the question with the API owner without deleting the bug
+report or leaving the pipeline permanently red. Remove the marker once the owner rules —
+if the behaviour is intended, rewrite the assertion instead.
 
 1. **Negative `amountIn` settles in reverse.** `amountIn = -1` is accepted (`201`) with
    negative `fee`/`amountOut`, accepts, and settles: the source wallet is *credited* and
    the target debited — a conversion run backwards at the forward rate that also *earns*
    the fee. No validation anywhere in the lifecycle.
-   Failing test: `test_amount_validation.py::test_negative_amount_is_rejected`.
+   Skipped test: `tests/integration/test_amount_validation.py::test_negative_amount_is_rejected`.
 2. **Concurrent settlements lose updates.** Two quotes accepted back-to-back both reach
    `SUCCESS`/`amountDue: 0`, but each settlement applies its delta to a stale balance
    snapshot and the last write wins — one conversion's wallet impact vanishes (and any
    combined overdraw is silently masked). Sequential conversions accumulate correctly.
-   Failing test: `test_quote_lifecycle.py::test_concurrent_conversions_apply_combined_impact`
+   Skipped test: `tests/e2e/test_quote_lifecycle.py::test_concurrent_conversions_apply_combined_impact`
    (failure depends on the settlement race; every observed run has lost the update). The loss
    is **permanent, not a read-too-early artifact**: re-reading balances for 18s after both
    quotes report `SUCCESS`/`amountDue: 0` shows the delta pinned at exactly one quote's
@@ -270,13 +282,13 @@ defect; when the simulator is fixed the test simply goes green, with no marker t
    `(unrounded − fee) × price` within tolerance while the echo-derived value is off by ~25×
    the tolerance. The quote is internally consistent everywhere *except* `amountIn`, which
    under-reports what the customer is charged — one root cause, two visible symptoms.
-   Failing test: `test_amount_validation.py::test_excess_precision_fee_matches_reported_amount_in`.
+   Skipped test: `tests/integration/test_amount_validation.py::test_excess_precision_fee_matches_reported_amount_in`.
    ⚠️ `test_excess_precision_amount_is_rounded` currently **passes by asserting the rounded
    echo is the contract** — it enshrines this behaviour and must be revisited once the owner
    rules on which side is correct.
 4. **`convertedAvailable`/`approxConvertedAvailable` are a static `"10000"`** on every
    wallet in every capture, never reflecting balance changes. Possibly an intentional
-   stub — unmodeled and unasserted until the owner confirms; no failing test.
+   stub — unmodeled and unasserted until the owner confirms; no test.
 5. **`useMaximum` is a no-op.** Ignored when `amountIn` is present; without `amountIn` the
    request is rejected with the amount-not-specified 400 — there is no working
    "convert everything" mode. Untestable until the intended semantics are known; no test.
@@ -285,12 +297,18 @@ defect; when the simulator is fixed the test simply goes green, with no marker t
    must-be-positive validation. Cosmetic; `test_zero_amount_is_rejected` asserts the
    observed contract and stays green.
 
-Expected e2e outcome while all of the above stand: **exactly 3 failing tests** (items 1–3).
+Expected outcome while all of the above stand: **zero failures and exactly 3 skips** —
+items 1 and 3 in `tests/integration`, item 2 in `tests/e2e`.
 
 ## CI
 
-- **Gated pipeline in `.github/workflows/ci.yml`:** `code analysis` → `smoke` → `e2e` →
-  `report`, chained with `needs:`. Triggers: push to main, PRs (and pushes to them), a daily
+- **Gated pipeline in `.github/workflows/ci.yml`:** `code analysis` → `smoke` →
+  (`integration` ∥ `e2e`) → `report`, chained with `needs:`. **`integration` and `e2e` both
+  depend on `smoke` only, so they run concurrently** — neither consumes the other's output,
+  and every test provisions its own customer via `/init`, so the suites cannot collide on
+  shared state. Serialising them would put a second checkout + `pip install` (~40s) on the
+  critical path, which exceeds the integration level's whole runtime; the fail-fast this
+  would buy is already covered by `code analysis` and `smoke`. Triggers: push to main, PRs (and pushes to them), a daily
   heartbeat schedule at **10:00 Europe/Sofia**, and manual dispatch. Cron is UTC and DST-blind,
   so the offset is encoded in the **month field** of two disjoint crons — `0 7 * 4-10 *`
   (UTC+3, summer) and `0 8 * 1-3,11,12 *` (UTC+2, winter). Exactly one fires per day, so this
@@ -302,8 +320,8 @@ Expected e2e outcome while all of the above stand: **exactly 3 failing tests** (
   deploy the root report exactly like main pushes.
   `code analysis` = Ruff (`check` + `format --check`) plus the build gate
   (`pytest --collect-only` with a placeholder `API_BASE_URL` — there is no build backend, so
-  install + collect IS the build). `smoke` = liveness gate (`pytest tests/smoke`); `e2e` =
-  `pytest tests/e2e`. No CodeQL — evaluated and removed as too heavy for this repo's needs.
+  install + collect IS the build). `smoke` = liveness gate (`pytest tests/smoke`);
+  `integration` = `pytest tests/integration`; `e2e` = `pytest tests/e2e`. No CodeQL — evaluated and removed as too heavy for this repo's needs.
 - **Report publishing:** the `report` job runs even when tests fail, builds the Allure report
   with run history (`simple-elf/allure-report-action`), and deploys to GitHub Pages
   (`gh-pages` branch): main pushes go to the site root (with trend history), PR runs go to

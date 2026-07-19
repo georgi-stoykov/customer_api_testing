@@ -49,3 +49,30 @@ def test_conversion_settles_with_correct_amounts(
         from_currency=from_currency,
         to_currency=to_currency,
     )
+
+
+@allure.title("Converting the full wallet balance drains the wallet to exactly zero")
+def test_full_balance_conversion_drains_wallet(
+    customer_api: ApiClient,
+    conversion_asserter: ConversionAsserter,
+) -> None:
+    wallets_before = customer_api.wallet.list()
+    amount_in = wallets_before.by_currency(Currency.ETH).balance
+
+    settled_quote = send_quote(
+        customer_api,
+        from_currency=Currency.ETH,
+        to_currency=Currency.TRX,
+        amount_in=amount_in,
+        wallets=wallets_before,
+    )
+
+    wallets_after = customer_api.wallet.list()
+    conversion_asserter.assert_settled_conversion(
+        quote=settled_quote,
+        wallets_before=wallets_before,
+        wallets_after=wallets_after,
+        from_currency=Currency.ETH,
+        to_currency=Currency.TRX,
+    )
+    conversion_asserter.assert_wallet_drained(wallets_after.by_currency(Currency.ETH))

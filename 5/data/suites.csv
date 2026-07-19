@@ -1,0 +1,6 @@
+"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
+"","6577","Conversion 1 ETH -> TRX settles with correct amounts","tests.e2e","2026-07-19","passed","2026-07-19","","test_conversion","",""
+"","7055","Conversion 987 TRX -> ETH settles with correct amounts","tests.e2e","2026-07-19","passed","2026-07-19","","test_conversion","",""
+"","495","Liveness: /echo round-trips an authenticated payload","tests.smoke","2026-07-19","passed","2026-07-19","","test_liveness","",""
+"","6952","Conversion 420 TRX -> USDT settles with correct amounts","tests.e2e","2026-07-19","passed","2026-07-19","","test_conversion","",""
+"","391","Liveness: /health reports system metrics","tests.smoke","2026-07-19","passed","2026-07-19","","test_liveness","",""

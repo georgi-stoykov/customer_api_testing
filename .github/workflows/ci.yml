@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Daily heartbeat against the live API from main, at 10:00 Sofia year-round.
+  # Cron is UTC and DST-blind, so both candidate hours fire and the
+  # schedule_gate job lets through only the one that is 10:00 local.
+  schedule:
+    - cron: "0 7 * * *"
+    - cron: "0 8 * * *"
   workflow_dispatch:
 
 # One run per ref; superseded PR runs are cancelled, main runs never are
@@ -13,12 +19,29 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # Gate 0 — DST filter for the doubled cron: only the firing that lands on
+  # 10:00 Europe/Sofia proceeds; every non-schedule trigger passes through.
+  schedule_gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ] || [ "$(TZ=Europe/Sofia date +%H)" = "10" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # Gate 1 — "build" + code review: deps install, style/lint clean, every module
   # imports and every test collects. No build backend exists (test suite, not a
   # package), so install + collect-only IS the build check. Needs no secrets:
   # the placeholder satisfies settings.py's import-time API_BASE_URL requirement;
   # collection makes no HTTP calls.
   lint:
+    needs: schedule_gate
+    if: needs.schedule_gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -120,7 +143,7 @@ jobs:
           name: allure-report
           path: allure-history
       - name: Deploy report to GitHub Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -142,8 +165,9 @@ jobs:
       - name: Link the report in the run summary
         if: always()
         run: |
-          PAGES="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          # github.event.repository is absent on schedule events — use the env var.
+          PAGES="https://${{ github.repository_owner }}.github.io/${GITHUB_REPOSITORY#*/}"
+          if { [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "schedule" ]; } && [ "${{ github.ref }}" = "refs/heads/main" ]; then
             {
               echo "### Allure report"
               echo "This run: $PAGES/${{ github.run_number }}/"

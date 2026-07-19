@@ -209,7 +209,11 @@ root pieces.
 ## CI
 
 - **Gated pipeline in `.github/workflows/ci.yml`:** `lint` → `smoke` → `e2e` → `report`,
-  chained with `needs:`. `lint` = Ruff (`check` + `format --check`) plus the build gate
+  chained with `needs:`. Triggers: push to main, PRs (and pushes to them), a daily schedule
+  at **10:00 Europe/Sofia year-round** (cron is DST-blind, so two UTC crons fire — 07:00 and
+  08:00 — and the `schedule_gate` job passes only the one that is 10:00 local; the other ends
+  as an all-skipped run), and manual dispatch. Scheduled runs deploy the root report exactly
+  like main pushes. `lint` = Ruff (`check` + `format --check`) plus the build gate
   (`pytest --collect-only` with a placeholder `API_BASE_URL` — there is no build backend, so
   install + collect IS the build). `smoke` = liveness gate (`pytest tests/smoke`); `e2e` =
   `pytest tests/e2e`. No CodeQL — evaluated and removed as too heavy for this repo's needs.
@@ -218,7 +222,9 @@ root pieces.
   (`gh-pages` branch): main pushes go to the site root (with trend history), PR runs go to
   `pr-<PR>/` on the same site (standalone preview, no effect on root history; fork PRs
   excluded — no token push rights). Every run also uploads the `allure-report` artifact.
-  The run summary links the applicable report URL. The `gh-pages` branch was
+  The run summary links the applicable report URL. PR preview dirs are cleaned up by the
+  **manually triggered** `cleanup-pr-reports.yml` workflow (never automatic; scope input:
+  `closed-prs` default, or `all`). The `gh-pages` branch was
   bootstrapped once as an empty orphan commit — the report job requires it to exist (its
   checkout fails loudly rather than half-initializing the publish dir).
 - **The published report is world-readable — the API host must never appear in it.**

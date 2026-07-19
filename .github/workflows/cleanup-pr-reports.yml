@@ -1,0 +1,55 @@
+name: cleanup-pr-reports
+
+# Manually triggered housekeeping: deletes pr-<N>/ Allure preview directories
+# from the gh-pages branch. Previews are regenerable (re-run the PR's ci), so
+# deletion is low-stakes; main's root report and run history are never touched.
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: Which PR report previews to delete
+        type: choice
+        options:
+          - closed-prs
+          - all
+        default: closed-prs
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+      - name: Delete PR preview directories
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shopt -s nullglob
+          removed=0
+          for dir in pr-*/; do
+            pr="${dir#pr-}"; pr="${pr%/}"
+            state="n/a"
+            if [ "${{ inputs.scope }}" = "closed-prs" ]; then
+              state=$(gh api "repos/${{ github.repository }}/pulls/$pr" -q .state 2>/dev/null || echo "unknown")
+              if [ "$state" = "open" ]; then
+                echo "keeping  $dir (PR open)"
+                continue
+              fi
+            fi
+            echo "removing $dir (PR state: $state)"
+            git rm -rq "$dir"
+            removed=$((removed+1))
+          done
+          echo "### Removed $removed PR preview(s), scope: ${{ inputs.scope }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$removed" -eq 0 ]; then
+            echo "Nothing to remove."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Clean up $removed PR report preview(s)"
+          git push origin gh-pages

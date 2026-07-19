@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from decimal import Decimal
 from enum import StrEnum
 from pydantic import Field, RootModel
@@ -23,7 +24,11 @@ class Wallet(ApiModel):
     available: Decimal
     approx_balance: Decimal = Field(alias="approxBalance")
     approx_available: Decimal = Field(alias="approxAvailable")
-    status: WalletStatus
+    status: str
+
+    @property
+    def label(self) -> str:
+        return f"wallet ({self.currency.code})"
 
 
 class AccountWallets(RootModel[list[Wallet]]):
@@ -34,6 +39,17 @@ class AccountWallets(RootModel[list[Wallet]]):
         if len(matching_wallets) > 1:
             raise ValueError(f"{len(matching_wallets)} wallets for currency {code!r}, expected one")
         return matching_wallets[0]
+
+    def by_id(self, wallet_id: int) -> Wallet:
+        matching_wallets = [wallet for wallet in self.root if wallet.id == wallet_id]
+        if not matching_wallets:
+            raise KeyError(f"No wallet with id {wallet_id!r}")
+        if len(matching_wallets) > 1:
+            raise ValueError(f"{len(matching_wallets)} wallets with id {wallet_id!r}, expected one")
+        return matching_wallets[0]
+
+    def __iter__(self) -> Iterator[Wallet]:
+        return iter(self.root)
 
     def __len__(self) -> int:
         return len(self.root)

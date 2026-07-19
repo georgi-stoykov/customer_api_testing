@@ -1,3 +1,4 @@
+from decimal import Decimal
 import pytest
 from engine.api_asserters import ConversionAsserter
 from engine.api_client import ApiClient
@@ -8,9 +9,9 @@ from engine.api_flows import send_quote
 @pytest.mark.parametrize(
     ("from_currency", "to_currency", "amount_in"),
     [
-        pytest.param(Currency.ETH, Currency.TRX, "1", id="1-ETH-to-TRX"),
-        pytest.param(Currency.TRX, Currency.USDT, "420", id="420-TRX-to-USDT"),
-        pytest.param(Currency.TRX, Currency.ETH, "987", id="987-TRX-to-ETH"),
+        pytest.param(Currency.ETH, Currency.TRX, Decimal("1"), id="ETH-to-TRX"),
+        pytest.param(Currency.TRX, Currency.USDT, Decimal("420"), id="TRX-to-USDT"),
+        pytest.param(Currency.TRX, Currency.ETH, Decimal("987"), id="TRX-to-ETH"),
     ],
 )
 def test_conversion_settles_with_correct_amounts(
@@ -18,7 +19,7 @@ def test_conversion_settles_with_correct_amounts(
     conversion_asserter: ConversionAsserter,
     from_currency: Currency,
     to_currency: Currency,
-    amount_in: str,
+    amount_in: Decimal,
 ) -> None:
     wallets_before = new_customer.wallet.list()
 

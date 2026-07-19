@@ -62,8 +62,12 @@ root pieces.
   `http.HTTPMethod` / `http.HTTPStatus`.
 - `utils/` (root, shared) — API-agnostic utility modules, one named module per concern.
   `monetary.py`: stateless money math + comparison primitives (`round_half_up`,
-  `max_rounding_error`, `assert_equal`, `assert_equal_within`), imported as the module
-  (`from engine.utils import monetary`).
+  `rounding_tolerance`, `assert_equal`, `assert_equal_with_tolerance`), imported as the module
+  (`from engine.utils import monetary`). `checks.py`: the generic equality assertion
+  (`assert_equal(actual, expected, context)`) — single source of the
+  `context: expected X, got Y` failure-message format; `monetary.assert_equal` delegates to
+  it, and asserters use `checks.assert_equal` for all non-monetary field comparisons (no
+  hand-rolled `assert x == y, f"..."` messages).
 - `api_constants/` — the customer API's domain values (no magic literals): `currencies.py`
   (`Currency` StrEnum), `fees.py` (`CONVERSION_FEE_RATE`), `settlement.py` (settlement timeout +
   poll interval, via `settings.env_float`).
@@ -72,7 +76,11 @@ root pieces.
 - `api_models/` — pydantic v2 (`Wallet`, `AccountWallets`, `Quote`, `QuoteCreateRequest`,
   `QuoteStatus`, `PaymentStatus`, `PayMethod`). Response models own their own selection:
   `AccountWallets` is a `RootModel[list[Wallet]]` (the `/api/wallet` response) exposing
-  `AccountWallets.by_currency(code) -> Wallet`.
+  `AccountWallets.by_currency(code) -> Wallet`, `by_id(wallet_id) -> Wallet`, iteration, and
+  `len()` — set traversal/pairing lives on the model, so asserters sweep the wallets the API
+  actually returned (paired before/after by `id`), never a hand-maintained currency list.
+  `Wallet.label` (e.g. `wallet (ETH)`) is the single source of the wallet failure-message
+  prefix used by asserters.
 - `api_resources/` — pure endpoint clients: `CustomerApi`, `WalletApi`, `QuoteApi`. Endpoint
   paths are named constants in each resource module.
 - `api_flows/` — composites: `new_customer()`, `wait_for_settlement()`, `send_quote()`.
@@ -104,7 +112,7 @@ root pieces.
   the API rounds `price` (to `pricePrecision`) and `amountOut` (to the target's
   `quantityPrecision`) independently from an internal full-precision rate it never exposes
   (`netPrice`/`grossPrice` are equally rounded). It is compared within
-  `(amountIn − fee) × max_rounding_error(pricePrecision) + max_rounding_error(quantityPrecision)`
+  `(amountIn − fee) × rounding_tolerance(pricePrecision) + rounding_tolerance(quantityPrecision)`
   — never a hard-coded rate or an arbitrary float epsilon.
 - **Request boilerplate lives on the model, not the resource.** Use pydantic defaults + aliases
   (`populate_by_name=True`, `from_` aliased to `"from"`, money as `str`,
@@ -138,7 +146,7 @@ root pieces.
     new ones from repeating patterns rather than building upfront.
   - **All monetary calculation/comparison goes through the `monetary` module**
     (`engine/utils/monetary.py`: stateless functions `round_half_up`,
-    `max_rounding_error`, `assert_equal`, `assert_equal_within`, imported as the module and called
+    `rounding_tolerance`, `assert_equal`, `assert_equal_with_tolerance`, imported as the module and called
     as `monetary.assert_equal(...)`). Asserters never compare or quantize `Decimal`s inline — one
     module guarantees every field follows the same comparison principle and failure-message format.
 - `tests/conftest.py` provides a `new_customer` fixture (a fresh `ApiClient` per test, built via

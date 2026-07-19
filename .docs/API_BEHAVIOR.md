@@ -117,7 +117,7 @@ direction (e.g. ETH → TRX), where `amountOut`'s own rounding dominates. Neithe
 exact for all pairs.
 
 **Implication for asserters:** compare `expected_amount_out` within
-`(amountIn − fee) × max_rounding_error(pricePrecision) + max_rounding_error(quantityPrecision)`
+`(amountIn − fee) × rounding_tolerance(pricePrecision) + rounding_tolerance(quantityPrecision)`
 — not by exact rounded equality, and not with an arbitrary epsilon. (Rule recorded in
 `.claude/CLAUDE.md`; implemented in `engine/api_asserters/conversion.py`.)
 `expected_fee` **is** exact and stays an equality check.

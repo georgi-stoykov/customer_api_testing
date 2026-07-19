@@ -1,4 +1,5 @@
 from decimal import ROUND_HALF_UP, Decimal
+from engine.utils import checks
 
 
 def round_half_up(
@@ -8,8 +9,11 @@ def round_half_up(
     return value.quantize(Decimal(10) ** -decimal_places, rounding=ROUND_HALF_UP)
 
 
-def max_rounding_error(decimal_places: int) -> Decimal:
-    return Decimal(10) ** -decimal_places / 2
+def rounding_tolerance(decimal_places: int) -> Decimal:
+    # the largest amount rounding to N decimal places can move a value:
+    # rounding_tolerance(2) == Decimal("0.005"), e.g. 1.995 rounds to 2.00
+    smallest_step = Decimal(10) ** -decimal_places
+    return smallest_step / 2
 
 
 def assert_equal(
@@ -18,18 +22,19 @@ def assert_equal(
     expected: Decimal,
     context: str,
 ) -> None:
-    assert actual == expected, f"{context}: expected {expected}, got {actual}"
+    checks.assert_equal(actual=actual, expected=expected, context=context)
 
 
-def assert_equal_within(
+def assert_equal_with_tolerance(
     *,
     actual: Decimal,
     expected: Decimal,
-    allowed_error: Decimal,
+    tolerance: Decimal,
     context: str,
 ) -> None:
-    observed_error = abs(actual - expected)
-    assert observed_error <= allowed_error, (
-        f"{context}: expected {expected} within {allowed_error}, "
-        f"got {actual} (off by {observed_error})"
+    # with tolerance=Decimal("0.005"),
+    # actual=1.998 vs expected=2.00 passes (off by 0.002), actual=1.99 fails (off by 0.01).
+    difference = abs(actual - expected)
+    assert difference <= tolerance, (
+        f"{context}: expected {expected} within {tolerance}, got {actual} (off by {difference})"
     )

@@ -30,7 +30,7 @@ def send_quote(
     *,
     from_currency: Currency,
     to_currency: Currency,
-    amount_in: str | Decimal,
+    amount_in: Decimal,
 ) -> Quote:
     wallets = api.wallet.list()
     source = wallets.by_currency(from_currency)

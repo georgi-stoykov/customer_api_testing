@@ -1,9 +1,8 @@
-from collections.abc import Iterator
 from decimal import Decimal
 from enum import StrEnum
-from pydantic import Field, RootModel
+from pydantic import Field
 from engine.api_constants.currencies import Currency
-from engine.api_models.common import ApiModel
+from engine.api_models.common import ApiModel, RootList
 
 
 class WalletStatus(StrEnum):
@@ -31,25 +30,15 @@ class Wallet(ApiModel):
         return f"wallet ({self.currency.code})"
 
 
-class AccountWallets(RootModel[list[Wallet]]):
+class CustomerWallets(RootList[Wallet]):
     def by_currency(self, code: Currency) -> Wallet:
-        matching_wallets = [wallet for wallet in self.root if wallet.currency.code == code]
-        if not matching_wallets:
-            raise KeyError(f"No wallet for currency {code!r}")
-        if len(matching_wallets) > 1:
-            raise ValueError(f"{len(matching_wallets)} wallets for currency {code!r}, expected one")
-        return matching_wallets[0]
+        return self._single(
+            lambda wallet: wallet.currency.code == code,
+            description=f"wallet for currency {code!r}",
+        )
 
     def by_id(self, wallet_id: int) -> Wallet:
-        matching_wallets = [wallet for wallet in self.root if wallet.id == wallet_id]
-        if not matching_wallets:
-            raise KeyError(f"No wallet with id {wallet_id!r}")
-        if len(matching_wallets) > 1:
-            raise ValueError(f"{len(matching_wallets)} wallets with id {wallet_id!r}, expected one")
-        return matching_wallets[0]
-
-    def __iter__(self) -> Iterator[Wallet]:
-        return iter(self.root)
-
-    def __len__(self) -> int:
-        return len(self.root)
+        return self._single(
+            lambda wallet: wallet.id == wallet_id,
+            description=f"wallet with id {wallet_id!r}",
+        )

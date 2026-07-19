@@ -4,5 +4,5 @@ from engine.api_client import ApiClient
 
 
 @pytest.fixture
-def new_customer() -> ApiClient:
+def customer_api() -> ApiClient:
     return flows.new_customer()

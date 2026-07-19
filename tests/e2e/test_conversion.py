@@ -1,7 +1,7 @@
 from decimal import Decimal
 import allure
 import pytest
-from engine.api_asserters import ConversionAsserter
+from engine.api_asserters import ConversionAsserter, QuoteAsserter
 from engine.api_client import ApiClient
 from engine.api_constants.currencies import Currency
 from engine.api_flows import send_quote
@@ -19,28 +19,33 @@ from engine.api_flows import send_quote
     "Conversion {amount_in} {from_currency} -> {to_currency} settles with correct amounts"
 )
 def test_conversion_settles_with_correct_amounts(
-    new_customer: ApiClient,
+    customer_api: ApiClient,
     conversion_asserter: ConversionAsserter,
+    quote_asserter: QuoteAsserter,
     from_currency: Currency,
     to_currency: Currency,
     amount_in: Decimal,
 ) -> None:
-    wallets_before = new_customer.wallet.list()
+    wallets_before = customer_api.wallet.list()
 
     settled_quote = send_quote(
-        new_customer,
+        customer_api,
         from_currency=from_currency,
         to_currency=to_currency,
         amount_in=amount_in,
     )
 
-    wallets_after = new_customer.wallet.list()
+    wallets_after = customer_api.wallet.list()
 
+    quote_asserter.assert_settled_quote(
+        quote=settled_quote,
+        source_currency=wallets_after.by_currency(from_currency).currency,
+        target_currency=wallets_after.by_currency(to_currency).currency,
+    )
     conversion_asserter.assert_settled_conversion(
         quote=settled_quote,
         wallets_before=wallets_before,
         wallets_after=wallets_after,
         from_currency=from_currency,
         to_currency=to_currency,
-        amount_in=amount_in,
     )

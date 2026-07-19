@@ -4,8 +4,8 @@ from engine.utils import checks
 
 
 @allure.title("Liveness: /health reports system metrics")
-def test_health_reports_system_metrics(new_customer: ApiClient) -> None:
-    health = new_customer.system.health()
+def test_health_reports_system_metrics(customer_api: ApiClient) -> None:
+    health = customer_api.system.health()
 
     assert health.uptime, f"health uptime: expected a non-empty value, got {health.uptime!r}"
     assert health.total_authenticated_requests >= 1, (
@@ -14,10 +14,10 @@ def test_health_reports_system_metrics(new_customer: ApiClient) -> None:
 
 
 @allure.title("Liveness: /echo round-trips an authenticated payload")
-def test_echo_round_trips_authenticated_payload(new_customer: ApiClient) -> None:
+def test_echo_round_trips_authenticated_payload(customer_api: ApiClient) -> None:
     request_payload = {"probe": "ci-liveness"}
 
-    echo = new_customer.system.echo(request_payload)
+    echo = customer_api.system.echo(request_payload)
 
     checks.assert_equal(
         actual=echo.request_payload,

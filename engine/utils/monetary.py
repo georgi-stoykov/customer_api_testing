@@ -9,9 +9,9 @@ def round_half_up(
     return value.quantize(Decimal(10) ** -decimal_places, rounding=ROUND_HALF_UP)
 
 
-def rounding_tolerance(decimal_places: int) -> Decimal:
+def compute_max_rounding_error(decimal_places: int) -> Decimal:
     # the largest amount rounding to N decimal places can move a value:
-    # rounding_tolerance(2) == Decimal("0.005"), e.g. 1.995 rounds to 2.00
+    # compute_max_rounding_error(2) == Decimal("0.005"), e.g. 1.995 rounds to 2.00
     smallest_step = Decimal(10) ** -decimal_places
     return smallest_step / 2
 

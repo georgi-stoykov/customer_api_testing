@@ -101,10 +101,10 @@ jobs:
           pattern: allure-results-*
           path: allure-results
           merge-multiple: true
-      # Prior reports feed Allure's trend/history widgets. The branch does not
-      # exist before the first main run — hence continue-on-error.
+      # Prior reports feed Allure's trend/history widgets. The gh-pages branch
+      # is bootstrapped once (empty orphan commit); a missing branch fails loudly
+      # here rather than poisoning the publish dir with a half-initialized .git.
       - uses: actions/checkout@v4
-        continue-on-error: true
         with:
           ref: gh-pages
           path: gh-pages

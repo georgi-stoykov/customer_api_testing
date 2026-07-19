@@ -4,10 +4,9 @@ Reference notes from probing the live simulator.
 These document *observed* behaviour (verified against real responses), which drives the
 test design, models, and asserters. Raw sanitized samples are in `docs/api-samples/`.
 
-> **Host gotcha:** the live API is `https://[live-api-host]`
-> (note the extra **`api`** in the hostname). The host printed in the task PDF,
-> `[task-pdf-host]` (no `api`), is dead ("Coming Soon"). Swagger UI at
-> `/docs`, OpenAPI spec at `/openapi.json`.
+> **Host gotcha:** the live API host (set via `API_BASE_URL` in the local `.env`) carries
+> an extra **`api`** segment in its hostname. The host printed in the task PDF (without
+> `api`) is dead ("Coming Soon"). Swagger UI at `/docs`, OpenAPI spec at `/openapi.json`.
 
 ## Endpoints
 

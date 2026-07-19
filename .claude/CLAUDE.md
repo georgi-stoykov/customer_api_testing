@@ -208,12 +208,15 @@ root pieces.
 
 ## CI
 
-- **Gated pipeline in `.github/workflows/ci.yml`:** `lint` → `smoke` → `e2e` → `report`,
-  chained with `needs:`. Triggers: push to main, PRs (and pushes to them), a daily schedule
-  at **10:00 Europe/Sofia year-round** (cron is DST-blind, so two UTC crons fire — 07:00 and
-  08:00 — and the `schedule_gate` job passes only the one that is 10:00 local; the other ends
-  as an all-skipped run), and manual dispatch. Scheduled runs deploy the root report exactly
-  like main pushes. `lint` = Ruff (`check` + `format --check`) plus the build gate
+- **Gated pipeline in `.github/workflows/ci.yml`:** `code analysis` → `smoke` → `e2e` →
+  `report`, chained with `needs:`. Triggers: push to main, PRs (and pushes to them), a daily
+  schedule at **10:00 Europe/Sofia year-round** (cron is DST-blind, so two UTC crons fire —
+  07:00 and 08:00 — and the `schedule_gate` job passes only the one that is 10:00 local; the
+  other ends as an all-skipped run), and manual dispatch. The gate runs on every trigger, not
+  just schedules: GitHub expressions have no date/timezone functions, so the DST check needs a
+  shell — and gating steps *inside* a job instead would report a green "success" for a run that
+  tested nothing. Scheduled runs deploy the root report exactly like main pushes.
+  `code analysis` = Ruff (`check` + `format --check`) plus the build gate
   (`pytest --collect-only` with a placeholder `API_BASE_URL` — there is no build backend, so
   install + collect IS the build). `smoke` = liveness gate (`pytest tests/smoke`); `e2e` =
   `pytest tests/e2e`. No CodeQL — evaluated and removed as too heavy for this repo's needs.
@@ -227,6 +230,11 @@ root pieces.
   `closed-prs` default, or `all`). The `gh-pages` branch was
   bootstrapped once as an empty orphan commit — the report job requires it to exist (its
   checkout fails loudly rather than half-initializing the publish dir).
+- **Pages source is "deploy from a branch"** (`gh-pages`), so every push to that branch makes
+  GitHub spawn its own `pages build and deployment` run. That run is GitHub infrastructure, not
+  a second pipeline of ours, and cannot be folded into `ci` while the branch source is in use.
+  The branch source is what lets `ci` mutate the site incrementally — Allure trend history, and
+  PR previews that are written into `pr-<PR>/` without ever republishing the root.
 - **The published report is world-readable — the API host must never appear in it.**
   `--allure-no-capture` is mandatory in CI pytest invocations; `BaseClient` logs
   `method + path` only and converts `requests` transport exceptions to `ApiError` with

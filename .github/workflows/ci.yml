@@ -34,12 +34,13 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
-  # Gate 1 — "build" + code review: deps install, style/lint clean, every module
-  # imports and every test collects. No build backend exists (test suite, not a
-  # package), so install + collect-only IS the build check. Needs no secrets:
-  # the placeholder satisfies settings.py's import-time API_BASE_URL requirement;
-  # collection makes no HTTP calls.
-  lint:
+  # Gate 1 — "build" + static checks: deps install, style/lint clean, every
+  # module imports and every test collects. No build backend exists (test suite,
+  # not a package), so install + collect-only IS the build check. Needs no
+  # secrets: the placeholder satisfies settings.py's import-time API_BASE_URL
+  # requirement; collection makes no HTTP calls.
+  code_analysis:
+    name: code analysis
     needs: schedule_gate
     if: needs.schedule_gate.outputs.run == 'true'
     runs-on: ubuntu-latest
@@ -59,7 +60,7 @@ jobs:
   # Gate 2 — service liveness: /health + authenticated /echo must answer before
   # the slow E2E suite spends minutes against a dead or broken host.
   smoke:
-    needs: lint
+    needs: code_analysis
     runs-on: ubuntu-latest
     env:
       # Host is sensitive -> GitHub Actions secret.

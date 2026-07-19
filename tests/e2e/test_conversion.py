@@ -1,4 +1,5 @@
 from decimal import Decimal
+import allure
 import pytest
 from engine.api_asserters import ConversionAsserter
 from engine.api_client import ApiClient
@@ -13,6 +14,9 @@ from engine.api_flows import send_quote
         pytest.param(Currency.TRX, Currency.USDT, Decimal("420"), id="TRX-to-USDT"),
         pytest.param(Currency.TRX, Currency.ETH, Decimal("987"), id="TRX-to-ETH"),
     ],
+)
+@allure.title(
+    "Conversion {amount_in} {from_currency} -> {to_currency} settles with correct amounts"
 )
 def test_conversion_settles_with_correct_amounts(
     new_customer: ApiClient,

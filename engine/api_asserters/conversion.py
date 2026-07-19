@@ -1,4 +1,5 @@
 from decimal import Decimal
+import allure
 from engine.api_constants.currencies import Currency
 from engine.api_constants.fees import CONVERSION_FEE_RATE
 from engine.api_models.quotes import PaymentStatus, Quote, QuoteStatus
@@ -7,6 +8,7 @@ from engine.utils import checks, monetary
 
 
 class ConversionAsserter:
+    @allure.step("Source/target wallet balance+available move by exactly amountIn/amountOut")
     def assert_wallet_deltas(
         self,
         *,
@@ -37,6 +39,7 @@ class ConversionAsserter:
             context=f"target wallet available delta ({target_before.currency.code})",
         )
 
+    @allure.step("Fee and amountOut follow the conversion math")
     def assert_conversion_math(
         self,
         *,
@@ -68,6 +71,7 @@ class ConversionAsserter:
             context=f"amountOut = (amountIn - fee) x price ({target_currency.code})",
         )
 
+    @allure.step("Quote echoes the requested pair, amount, and wallet ids")
     def assert_quote_echoes_request(
         self,
         *,
@@ -96,6 +100,7 @@ class ConversionAsserter:
             context="quote usePayOutMethod wallet id",
         )
 
+    @allure.step("Settled quote's reported numbers are self-consistent")
     def assert_settled_quote_consistency(self, quote: Quote) -> None:
         for actual, expected, context in (
             (quote.amount_in_gross, quote.amount_in, "quote amountInGross vs amountIn"),
@@ -108,6 +113,7 @@ class ConversionAsserter:
         ):
             monetary.assert_equal(actual=actual, expected=expected, context=context)
 
+    @allure.step("Quote reached settled statuses")
     def assert_quote_settled(self, quote: Quote) -> None:
         checks.assert_equal(
             actual=quote.quote_status,
@@ -120,6 +126,7 @@ class ConversionAsserter:
             context="paymentStatus",
         )
 
+    @allure.step("Wallet count unchanged")
     def assert_wallet_count_unchanged(
         self,
         *,
@@ -132,6 +139,7 @@ class ConversionAsserter:
             context="wallet count",
         )
 
+    @allure.step("Wallet keeps its id, currency, and address")
     def assert_wallet_identity(
         self,
         *,
@@ -155,6 +163,7 @@ class ConversionAsserter:
             context=f"{wallet_context} address",
         )
 
+    @allure.step("Wallet stays ACTIVE")
     def assert_wallet_active(self, wallet: Wallet) -> None:
         checks.assert_equal(
             actual=wallet.status,
@@ -162,6 +171,7 @@ class ConversionAsserter:
             context=f"{wallet.label} status",
         )
 
+    @allure.step("approxBalance/approxAvailable mirror balance/available")
     def assert_wallet_approx_fields(self, wallet: Wallet) -> None:
         wallet_context = wallet.label
         monetary.assert_equal(
@@ -175,6 +185,7 @@ class ConversionAsserter:
             context=f"{wallet_context} approxAvailable vs available",
         )
 
+    @allure.step("Uninvolved wallet balances untouched")
     def assert_wallets_equal(
         self,
         *,
@@ -193,6 +204,7 @@ class ConversionAsserter:
             context=f"{wallet_context} available",
         )
 
+    @allure.step("Settled conversion: full account impact is correct")
     def assert_settled_conversion(
         self,
         *,
@@ -207,44 +219,61 @@ class ConversionAsserter:
         source_after = wallets_after.by_currency(from_currency)
         target_before = wallets_before.by_currency(to_currency)
         target_after = wallets_after.by_currency(to_currency)
-        self.assert_quote_echoes_request(
-            quote=quote,
-            from_currency=from_currency,
-            to_currency=to_currency,
-            amount_in=amount_in,
-            source_wallet_id=source_before.id,
-            target_wallet_id=target_before.id,
-        )
-        self.assert_quote_settled(quote)
-        self.assert_settled_quote_consistency(quote)
-        self.assert_conversion_math(
-            quote=quote,
-            source_currency=source_after.currency,
-            target_currency=target_after.currency,
-        )
-        self.assert_wallet_count_unchanged(
-            wallets_before=wallets_before,
-            wallets_after=wallets_after,
-        )
-        self.assert_wallet_deltas(
-            quote=quote,
-            source_before=source_before,
-            source_after=source_after,
-            target_before=target_before,
-            target_after=target_after,
-        )
+        # Soft: every atomic check runs and one combined failure reports them all.
+        # Only AssertionError is collected — structural errors (e.g. by_id on a
+        # vanished wallet) still abort immediately.
+        soft = checks.SoftAssertions()
+        with soft:
+            self.assert_quote_echoes_request(
+                quote=quote,
+                from_currency=from_currency,
+                to_currency=to_currency,
+                amount_in=amount_in,
+                source_wallet_id=source_before.id,
+                target_wallet_id=target_before.id,
+            )
+        with soft:
+            self.assert_quote_settled(quote)
+        with soft:
+            self.assert_settled_quote_consistency(quote)
+        with soft:
+            self.assert_conversion_math(
+                quote=quote,
+                source_currency=source_after.currency,
+                target_currency=target_after.currency,
+            )
+        with soft:
+            self.assert_wallet_count_unchanged(
+                wallets_before=wallets_before,
+                wallets_after=wallets_after,
+            )
+        with soft:
+            self.assert_wallet_deltas(
+                quote=quote,
+                source_before=source_before,
+                source_after=source_after,
+                target_before=target_before,
+                target_after=target_after,
+            )
         for wallet_before in wallets_before:
             wallet_after = wallets_after.by_id(wallet_before.id)
-            self.assert_wallet_identity(
-                expected_wallet=wallet_before,
-                actual_wallet=wallet_after,
-            )
-            self.assert_wallet_active(wallet_before)
-            self.assert_wallet_active(wallet_after)
-            self.assert_wallet_approx_fields(wallet_before)
-            self.assert_wallet_approx_fields(wallet_after)
-            if wallet_before.currency.code not in (from_currency, to_currency):
-                self.assert_wallets_equal(
+            with soft:
+                self.assert_wallet_identity(
                     expected_wallet=wallet_before,
                     actual_wallet=wallet_after,
                 )
+            with soft:
+                self.assert_wallet_active(wallet_before)
+            with soft:
+                self.assert_wallet_active(wallet_after)
+            with soft:
+                self.assert_wallet_approx_fields(wallet_before)
+            with soft:
+                self.assert_wallet_approx_fields(wallet_after)
+            if wallet_before.currency.code not in (from_currency, to_currency):
+                with soft:
+                    self.assert_wallets_equal(
+                        expected_wallet=wallet_before,
+                        actual_wallet=wallet_after,
+                    )
+        soft.assert_all()

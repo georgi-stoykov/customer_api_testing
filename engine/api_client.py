@@ -1,4 +1,4 @@
-from engine.api_resources import CustomerApi, QuoteApi, WalletApi
+from engine.api_resources import CustomerApi, QuoteApi, SystemApi, WalletApi
 from engine.base_client import BaseClient
 from engine.constants import settings
 
@@ -15,6 +15,7 @@ class ApiClient:
             token=token,
             timeout=settings.REQUEST_TIMEOUT,
         )
+        self.system = SystemApi(self._client)
         self.customer = CustomerApi(self._client)
         self.wallet = WalletApi(self._client)
         self.quote = QuoteApi(self._client)

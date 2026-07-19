@@ -91,13 +91,18 @@ class BaseClient:
     ) -> ApiResponse:
         url = self._base_url + path
         start = time.perf_counter()
-        response = self._session.request(
-            method,
-            url,
-            json=json,
-            params=params,
-            timeout=self._timeout,
-        )
+        try:
+            response = self._session.request(
+                method,
+                url,
+                json=json,
+                params=params,
+                timeout=self._timeout,
+            )
+        except requests.RequestException as error:
+            # `from None` drops the chained traceback, which contains the full URL —
+            # the base host must never leak into (publicly published) test reports.
+            raise ApiError(f"{method} {path}: transport failure ({type(error).__name__})") from None
         elapsed_ms = (time.perf_counter() - start) * 1000
         logger.info("%s %s -> %s (%.0fms)", method, path, response.status_code, elapsed_ms)
         try:

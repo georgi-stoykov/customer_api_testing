@@ -8,6 +8,11 @@
 pythonpath = ["."]
 testpaths = ["tests"]
 log_level = "INFO"
+# --strict-markers: test levels are folders (tests/smoke, tests/e2e), not markers;
+#   any custom mark is a typo — fail loudly instead of silently deselecting.
+# -n auto: run in parallel by default (pytest-xdist; safe — every test provisions
+#   its own customer). Debug serially with `pytest -n 0`.
+addopts = "--strict-markers -n auto"
 
 [tool.ruff]
 target-version = "py311"

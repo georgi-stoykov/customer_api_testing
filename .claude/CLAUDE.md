@@ -8,7 +8,8 @@ are made. **Record only what is — no dates, no "we considered/rejected X".**
 ## Project
 
 API test framework for a customer API simulator (account, wallets, quotes/conversions).
-Stack: **Python + pytest + requests**, pydantic v2 models, pytest-html report.
+Stack: **Python + pytest + requests**, pydantic v2 models, Allure report (`allure-pytest`),
+published to GitHub Pages by CI.
 The target host is configured via the `API_BASE_URL` env var and kept out of version control
 (local `.env`, gitignored). Swagger at `/docs`, OpenAPI spec at `/openapi.json`.
 
@@ -67,7 +68,8 @@ root pieces.
   (`assert_equal(actual, expected, context)`) — single source of the
   `context: expected X, got Y` failure-message format; `monetary.assert_equal` delegates to
   it, and asserters use `checks.assert_equal` for all non-monetary field comparisons (no
-  hand-rolled `assert x == y, f"..."` messages).
+  hand-rolled `assert x == y, f"..."` messages). `checks.py` also holds `SoftAssertions`,
+  the soft-assertion collector used by composite asserters.
 - `api_constants/` — the customer API's domain values (no magic literals): `currencies.py`
   (`Currency` StrEnum), `fees.py` (`CONVERSION_FEE_RATE`), `settlement.py` (settlement timeout +
   poll interval, via `settings.env_float`).
@@ -81,8 +83,13 @@ root pieces.
   actually returned (paired before/after by `id`), never a hand-maintained currency list.
   `Wallet.label` (e.g. `wallet (ETH)`) is the single source of the wallet failure-message
   prefix used by asserters.
-- `api_resources/` — pure endpoint clients: `CustomerApi`, `WalletApi`, `QuoteApi`. Endpoint
-  paths are named constants in each resource module.
+- `api_resources/` — pure endpoint clients: `CustomerApi`, `WalletApi`, `QuoteApi`,
+  `SystemApi` (`/health`, `/echo` — service/system endpoints live on their own resource, never
+  on `CustomerApi`; models in `api_models/system.py`). Endpoint paths are inline string
+  literals in the endpoint methods (f-strings for parametrized paths): each path is used
+  exactly once, and the one-method-per-endpoint rule already makes the method the single home
+  of its path — a module-level constant would just duplicate the name. This is the sanctioned
+  exception to the no-magic-literals rule.
 - `api_flows/` — composites: `new_customer()`, `wait_for_settlement()`, `send_quote()`.
   Multi-step orchestration is **not** a step/endpoint — the `flows` name guards the boundary
   against single-endpoint wrappers (those belong on resources).
@@ -144,6 +151,13 @@ root pieces.
   - Asserters live in `api_asserters/` (`ConversionAsserter`: atomic assertion methods
     composed into bigger ones, e.g. `assert_settled_conversion`), injected via fixtures. Extract
     new ones from repeating patterns rather than building upfront.
+  - **Composite asserters are soft.** A composite wraps each atomic call in a
+    `checks.SoftAssertions` `with` block and ends with `soft.assert_all()`, so one run reports
+    every failing check as one combined numbered failure. Atomic methods stay fail-fast plain
+    asserts (soft only at the composition level); only `AssertionError` is collected —
+    structural errors (e.g. `by_id` on a vanished wallet) abort immediately. Allure still marks
+    each failing `@allure.step` red: the step records the failure before the block suppresses
+    it.
   - **All monetary calculation/comparison goes through the `monetary` module**
     (`engine/utils/monetary.py`: stateless functions `round_half_up`,
     `rounding_tolerance`, `assert_equal`, `assert_equal_with_tolerance`, imported as the module and called
@@ -152,6 +166,16 @@ root pieces.
 - `tests/conftest.py` provides a `new_customer` fixture (a fresh `ApiClient` per test, built via
   `flows.new_customer()`; the fixture shares the flow's name, so conftest imports the `api_flows`
   module aliased as `flows` rather than the function).
+- **Tests run in parallel by default** (`pytest-xdist`, `-n auto` in `addopts`) — every test
+  must be parallel-safe: provision its own customer via the `new_customer` fixture, never
+  share account state across tests. Debug serially with `pytest -n 0`.
+- **Test levels are folders, not markers.** `tests/smoke/` (liveness: `/health` + `/echo`)
+  and `tests/e2e/` (full conversions); a file's location IS its level, selected by path
+  (`pytest tests/smoke`). No level markers — `--strict-markers` is on so any custom mark
+  fails loudly as a typo. Shared fixtures (`new_customer`) live in the root
+  `tests/conftest.py`; level-specific fixtures (`conversion_asserter`) in the level's own
+  conftest. Smoke checks are contract + trivial presence/equality only (via
+  `checks.assert_equal`) — no asserter class.
 - **Settlement is asynchronous.** Accept returns 200 immediately with balances unchanged; funds
   settle ~5–8s later. E2E tests must POLL `GET /quote/{uuid}` until `paymentStatus=SUCCESS`
   (timeout ~30s) BEFORE asserting balances.
@@ -181,3 +205,23 @@ root pieces.
 - **`price` is a pair-level rate; the asserter assumes the *target* currency's
   `pricePrecision`** for the `amountOut` bound — unverifiable while all currencies use 8 dp
   (noted in `.docs/API_BEHAVIOR.md`).
+
+## CI
+
+- **Gated pipeline in `.github/workflows/ci.yml`:** `lint` → `smoke` → `e2e` → `report`,
+  chained with `needs:`. `lint` = Ruff (`check` + `format --check`) plus the build gate
+  (`pytest --collect-only` with a placeholder `API_BASE_URL` — there is no build backend, so
+  install + collect IS the build). `smoke` = liveness gate (`pytest tests/smoke`); `e2e` =
+  `pytest tests/e2e`. CodeQL runs separately in `codeql.yml` (free tooling only — the repo is
+  public).
+- **Report publishing:** the `report` job runs even when tests fail, builds the Allure report
+  with run history (`simple-elf/allure-report-action`), and deploys to GitHub Pages
+  (`gh-pages` branch) **only on pushes to `main`**; PR runs upload the report as the
+  `allure-report` artifact. The run summary links the report URL.
+- **The published report is world-readable — the API host must never appear in it.**
+  `--allure-no-capture` is mandatory in CI pytest invocations; `BaseClient` logs
+  `method + path` only and converts `requests` transport exceptions to `ApiError` with
+  `from None` so the full URL never reaches a traceback.
+- **Allure decorators (`@allure.step` / `@allure.title`) are allowed on `api_flows/`,
+  `api_asserters/`, and tests only** — never on `base_client.py`, `api_resources/`, or
+  `api_models/` (transport and contract layers stay report-agnostic).

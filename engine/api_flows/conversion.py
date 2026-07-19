@@ -1,11 +1,13 @@
 import time
 from decimal import Decimal
+import allure
 from engine.api_client import ApiClient
 from engine.api_constants import settlement
 from engine.api_constants.currencies import Currency
 from engine.api_models.quotes import PaymentStatus, Quote, QuoteCreateRequest
 
 
+@allure.step("Poll quote {uuid} until paymentStatus=SUCCESS")
 def wait_for_settlement(
     api: ApiClient,
     uuid: str,
@@ -25,6 +27,7 @@ def wait_for_settlement(
         time.sleep(interval)
 
 
+@allure.step("Create, accept, and settle a quote: {amount_in} {from_currency} -> {to_currency}")
 def send_quote(
     api: ApiClient,
     *,

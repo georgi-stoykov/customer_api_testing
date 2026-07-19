@@ -14,6 +14,8 @@ dist/
 
 # Test / tooling caches & artifacts
 reports/
+allure-results/
+allure-report/
 .pytest_cache/
 .ruff_cache/
 .coverage

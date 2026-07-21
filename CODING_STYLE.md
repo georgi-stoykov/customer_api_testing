@@ -52,5 +52,7 @@ ruff format engine tests
 - **Enums use `StrEnum`** so a member equals its string value — safe in f-strings, comparisons, and
   JSON serialisation.
 - **Money is `Decimal`**, never `float`.
-- **Minimal comments.** Code should read on its own. The "why" lives in `.claude/CLAUDE.md`,
-  `.docs/`, and this file — do not restate what the code already says.
+- **Minimal comments.** Code should read on its own. The "why" lives in `.claude/CLAUDE.md`
+  and this file — do not restate what the code already says. A comment is at most 1–2 lines,
+  states only a constraint the code cannot show, and carries no file pointers — the full
+  rationale is findable in `.claude/CLAUDE.md`. (`.docs/` is legacy, unverified.)

@@ -5,6 +5,7 @@ from engine.api_asserters import ConversionAsserter, QuoteAsserter
 from engine.api_client import ApiClient
 from engine.api_constants.currencies import Currency
 from engine.api_flows import send_quote
+from engine.utils import checks
 
 
 @pytest.mark.parametrize(
@@ -13,6 +14,14 @@ from engine.api_flows import send_quote
         pytest.param(Currency.ETH, Currency.TRX, Decimal("1"), id="ETH-to-TRX"),
         pytest.param(Currency.TRX, Currency.USDT, Decimal("420"), id="TRX-to-USDT"),
         pytest.param(Currency.TRX, Currency.ETH, Decimal("987"), id="TRX-to-ETH"),
+        # Exactly at ETH's 8-dp quantityPrecision — runs the full-precision fee end to end.
+        pytest.param(
+            Currency.ETH,
+            Currency.TRX,
+            Decimal("0.12345678"),
+            id="ETH-to-TRX-max-precision",
+        ),
+        pytest.param(Currency.TRX, Currency.USDT, Decimal("420.5"), id="TRX-to-USDT-fractional"),
     ],
 )
 @allure.title(
@@ -49,6 +58,16 @@ def test_conversion_settles_with_correct_amounts(
         from_currency=from_currency,
         to_currency=to_currency,
     )
+    # Make sure changes are persisted.
+    for settled_wallet in (
+        wallets_after.by_currency(from_currency),
+        wallets_after.by_currency(to_currency),
+    ):
+        checks.assert_equal(
+            actual=customer_api.wallet.get(settled_wallet.id),
+            expected=settled_wallet,
+            context=f"{settled_wallet.label} single get vs list entry after settlement",
+        )
 
 
 @allure.title("Converting the full wallet balance drains the wallet to exactly zero")

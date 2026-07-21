@@ -1,5 +1,10 @@
 # Simulator API — Observed Behaviour
 
+> ⚠️ **UNVERIFIED — do not trust without re-probing.** This file was generated in a past
+> session. Treat every claim as a hypothesis and verify it against the live simulator before
+> building on it. Already-disproved example: the `amountIn` echo rounds ROUND_HALF_EVEN, not
+> HALF_UP as claimed below.
+
 Reference notes from probing the live simulator.
 These document *observed* behaviour (verified against real responses), which drives the
 test design, models, and asserters. Raw sanitized samples are in `docs/api-samples/`.

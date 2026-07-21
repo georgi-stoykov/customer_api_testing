@@ -26,9 +26,7 @@ class PayMethod(StrEnum):
 
 
 class QuoteCreateRequest(ApiModel):
-    # Currencies are wire-typed (str, not the Currency enum) so negative tests can send
-    # invalid codes through the same model; happy-path type safety lives on the flow
-    # signatures (Currency — create_quote also admits plain str for invalid-code tests).
+    # Wire-typed (str, not Currency) so negative tests can send invalid codes.
     from_: str = Field(alias="from")
     to: str
     from_wallet: int = Field(alias="fromWallet")

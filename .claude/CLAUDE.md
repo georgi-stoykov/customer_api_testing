@@ -5,6 +5,11 @@ These are **binding rules** — follow them exactly. Rationale lives in `.docs/`
 design lives in `.plans/PLAN.md`. This file is the rulebook; append new decisions here as they
 are made. **Record only what is — no dates, no "we considered/rejected X".**
 
+> ⚠️ **`.docs/API_BEHAVIOR.md` is NOT trusted evidence.** It was generated in a past session.
+> Treat every claim in it as an unverified hypothesis: re-probe the live simulator before
+> relying on it for design, asserters, or rulings. (Already-disproved example: it claimed the
+> `amountIn` echo rounds HALF_UP; live tie probes show ROUND_HALF_EVEN.)
+
 ## Project
 
 API test framework for a customer API simulator (customer, wallets, quotes/conversions).
@@ -138,6 +143,10 @@ root pieces.
 - **Request boilerplate lives on the model, not the resource.** Use pydantic defaults + aliases
   (`populate_by_name=True`, `from_` aliased to `"from"`, money as `str`,
   `model_dump(by_alias=True)`).
+- **Request models are wire-typed.** Currency fields are `str`, not the `Currency` enum, so
+  negative tests can push invalid codes through the same model; happy-path type safety lives
+  on the flow signatures (`create_quote` takes `Currency | str`, and its wallet-id override
+  exists for ids the customer cannot resolve).
 - **Model only the fields tests assert on.** Response models declare the asserted +
   contract-critical fields and rely on `extra="ignore"` (set on the `ApiModel` base) to drop the
   simulator's many unmodeled fields silently rather than hand-modeling noise (e.g. `Wallet.currency`
@@ -208,6 +217,15 @@ root pieces.
 - **Settlement is asynchronous.** Accept returns 200 immediately with balances unchanged; funds
   settle ~5–8s later. E2E tests must POLL `GET /quote/{uuid}` until `paymentStatus=SUCCESS`
   (timeout ~30s) BEFORE asserting balances.
+- **Waits must poll, never sleep in one block.** The simulator silently drops keep-alive
+  sockets idle ~10s+, and the next request on the stale socket dies with a transport error;
+  requests spaced at the poll interval keep the socket warm. `flows._poll_quote` backs every
+  wait (settlement, expiry, `hold_quote`) and returns the last fetched quote whether or not
+  the condition was met — callers decide how to fail.
+- **Read parity after a state change is asserted in the e2e happy path:** after settlement,
+  the canonical conversion test fetches the source and target wallets via the single-wallet
+  endpoint and compares them to their list entries — the integration parity suite covers only
+  never-converted customers.
 - **Fee math:** `fee = amountIn × 0.0001` (0.01%, in source currency);
   `amountOut = (amountIn − fee) × price`.
 - **A settled conversion asserts the customer's total impact — and only that**, via
@@ -254,8 +272,9 @@ observed against the live simulator; evidence and raw captures live in
 `.docs/API_BEHAVIOR.md`. None is confirmed as intended or as a bug by the API owner yet.
 
 **Policy: tests for these behaviours assert the CORRECT contract and are marked
-`@pytest.mark.skip(reason=PENDING_OWNER_RULING)`** (`engine/api_constants/general_messages.py` —
-one shared string, so the set is one edit to un-skip). The assertion stays written for the
+`@pytest.mark.skip`** with a reason string from `engine/api_constants/general_messages.py` —
+the shared `PENDING_OWNER_RULING` by default; a dedicated string where the question warrants
+its own label in the report (item 7's `UNCONFIRMED_HALF_EVEN_ROUNDING`). The assertion stays written for the
 correct contract: the skip parks the question with the API owner without deleting the bug
 report or leaving the pipeline permanently red. Remove the marker once the owner rules —
 if the behaviour is intended, rewrite the assertion instead.
@@ -296,9 +315,22 @@ if the behaviour is intended, rewrite the assertion instead.
    specified" (falsy), so the 400 detail is the amountIn/amountOut message rather than a
    must-be-positive validation. Cosmetic; `test_zero_amount_is_rejected` asserts the
    observed contract and stays green.
+7. **Exact-half ties round HALF_EVEN (banker's), not HALF_UP.** The `amountIn` echo
+   resolves a bare-5 tie to the even neighbour: `0.123456785 → 0.12345678` (even digit
+   stays), `0.123456775 → 0.12345678` and `0.123456795 → 0.12345680` (odd digit bumps to
+   even; these two also rule out HALF_DOWN). The `…795` probe further rules out a float64
+   artifact: its double sits *below* the tie, so any float-based rounding would echo `…79`,
+   yet the API returned `…80` — consistent with decimal-string parsing under Python
+   `Decimal`'s default context. Only exact ties are affected; any other dropped digit
+   rounds identically under both modes, which is why earlier probes (first dropped digit 9)
+   could not detect this. The tie test asserts HALF_UP until the owner rules which mode is
+   the intended contract.
+   Skipped test:
+   `tests/integration/test_amount_validation.py::test_excess_precision_amount_is_rounded[tie-rounds-up]`
+   (reason `UNCONFIRMED_HALF_EVEN_ROUNDING`).
 
-Expected outcome while all of the above stand: **zero failures and exactly 3 skips** —
-items 1 and 3 in `tests/integration`, item 2 in `tests/e2e`.
+Expected outcome while all of the above stand: **zero failures and exactly 4 skips** —
+items 1, 3, and 7 in `tests/integration`, item 2 in `tests/e2e`.
 
 ## CI
 

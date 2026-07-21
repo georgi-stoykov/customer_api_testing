@@ -7,7 +7,10 @@ from engine.api_asserters import ConversionAsserter, ErrorAsserter, QuoteAsserte
 from engine.api_client import ApiClient
 from engine.api_constants import error_details
 from engine.api_constants.currencies import Currency
-from engine.api_constants.general_messages import PENDING_OWNER_RULING
+from engine.api_constants.general_messages import (
+    PENDING_OWNER_RULING,
+    UNCONFIRMED_HALF_EVEN_ROUNDING,
+)
 
 
 @allure.title("A quote for more than the wallet balance is rejected at create")
@@ -69,8 +72,7 @@ def test_zero_amount_is_rejected(
         check=False,
     )
 
-    # Zero is treated as "amount not specified" (falsy), hence this detail rather than a
-    # dedicated must-be-positive validation — documented quirk (.docs/API_BEHAVIOR.md).
+    # Zero reads as "amount not specified" — known issue #6.
     error_asserter.assert_error(
         create_response,
         expected_status=HTTPStatus.BAD_REQUEST,
@@ -78,12 +80,25 @@ def test_zero_amount_is_rejected(
     )
 
 
-@allure.title("amountIn finer than the source quantityPrecision is rounded half-up")
+@pytest.mark.parametrize(
+    "requested_amount_in",
+    [
+        pytest.param(Decimal("0.123456789012"), id="rounds-up"),
+        pytest.param(Decimal("0.123456781234"), id="rounds-down"),
+        # Exact tie — the one input separating HALF_UP from HALF_EVEN; known issue #7.
+        pytest.param(
+            Decimal("0.123456785"),
+            id="tie-rounds-up",
+            marks=pytest.mark.skip(reason=UNCONFIRMED_HALF_EVEN_ROUNDING),
+        ),
+    ],
+)
+@allure.title("amountIn {requested_amount_in} is rounded half-up to the source quantityPrecision")
 def test_excess_precision_amount_is_rounded(
     customer_api: ApiClient,
     quote_asserter: QuoteAsserter,
+    requested_amount_in: Decimal,
 ) -> None:
-    requested_amount_in = Decimal("0.123456789012")
     wallets = customer_api.wallet.list()
 
     quote = flows.create_quote(

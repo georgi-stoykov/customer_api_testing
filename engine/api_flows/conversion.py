@@ -21,10 +21,8 @@ def create_quote(
     from_wallet_id: int | None = None,
     check: bool = True,
 ) -> Quote | ApiResponse:
-    # Currencies admit plain str so negative tests can send invalid codes; a wallet-id
-    # override skips resolution for ids the customer cannot resolve (mismatched or
-    # cross-customer wallets). Callers that already hold a wallets snapshot pass it to
-    # save the resolution fetch.
+    # str currencies / wallet-id override serve negative tests; a passed-in wallets
+    # snapshot saves the resolution fetch.
     if wallets is None:
         wallets = api.wallet.list()
     if from_wallet_id is None:
@@ -47,10 +45,8 @@ def _poll_quote(
     timeout: float,
     interval: float,
 ) -> Quote:
-    # Polling instead of one long sleep keeps the session's keep-alive socket warm: the
-    # simulator silently drops connections idle for ~10s+, and the next request on the
-    # stale socket dies with a transport error (.docs/API_BEHAVIOR.md). Returns the last
-    # fetched quote whether or not the condition was met — callers decide how to fail.
+    # Poll, never one long sleep — idle sockets get dropped.
+    # Returns the last fetched quote even if the condition never held; callers decide how to fail.
     deadline = time.monotonic() + timeout
     while True:
         quote = api.quote.get(uuid)

@@ -10,9 +10,7 @@ from engine.utils import checks, monetary
 class QuoteAsserter:
     @allure.step("Fee is amountIn x the conversion fee rate")
     def assert_fee(self, quote: Quote) -> None:
-        # Exact and unrounded: the API reports the fee at full precision, never quantized to
-        # the source quantityPrecision (probed with an amountIn sitting exactly at
-        # quantityPrecision - the fee came back at 12 dp).
+        # Exact and unrounded — never quantize the expected fee.
         monetary.assert_equal(
             actual=quote.fee,
             expected=quote.amount_in * CONVERSION_FEE_RATE,
@@ -46,14 +44,7 @@ class QuoteAsserter:
         source_currency: WalletCurrency,
         target_currency: WalletCurrency,
     ) -> Decimal:
-        # price and amountOut are each rounded independently off a full-precision internal rate
-        # the API never exposes, so (amountIn - fee) x price cannot equal amountOut exactly.
-        # Two roundings, two error terms:
-        #   price     - up to half a step at pricePrecision, amplified by the amount it multiplies
-        #   amountOut - up to half a step at the target's quantityPrecision, absolute
-        # Which side's pricePrecision bounds a pair-level rate is unverifiable while every
-        # simulator currency uses 8 dp; the coarser side gives the larger error, so the bound
-        # holds whichever side the API actually rounds to.
+        # One half-step error term per independent rounding, coarser pricePrecision side.
         price_precision = min(source_currency.price_precision, target_currency.price_precision)
         price_error = net_amount_in * monetary.compute_max_rounding_error(price_precision)
         amount_out_error = monetary.compute_max_rounding_error(target_currency.quantity_precision)
@@ -101,56 +92,54 @@ class QuoteAsserter:
         ):
             monetary.assert_equal(actual=actual, expected=expected, context=context)
 
-    @allure.step("Quote reached settled statuses")
-    def assert_quote_settled(self, quote: Quote) -> None:
+    @staticmethod
+    def _assert_statuses(
+        quote: Quote,
+        *,
+        expected_quote_status: QuoteStatus,
+        expected_payment_status: PaymentStatus,
+    ) -> None:
         checks.assert_equal(
             actual=quote.quote_status,
-            expected=QuoteStatus.PAYMENT_OUT_PROCESSED,
+            expected=expected_quote_status,
             context="quoteStatus",
         )
         checks.assert_equal(
             actual=quote.payment_status,
-            expected=PaymentStatus.SUCCESS,
+            expected=expected_payment_status,
             context="paymentStatus",
+        )
+
+    @allure.step("Quote reached settled statuses")
+    def assert_quote_settled(self, quote: Quote) -> None:
+        self._assert_statuses(
+            quote,
+            expected_quote_status=QuoteStatus.PAYMENT_OUT_PROCESSED,
+            expected_payment_status=PaymentStatus.SUCCESS,
         )
 
     @allure.step("Quote is pending acceptance")
     def assert_quote_pending(self, quote: Quote) -> None:
-        checks.assert_equal(
-            actual=quote.quote_status,
-            expected=QuoteStatus.PENDING,
-            context="quoteStatus",
-        )
-        checks.assert_equal(
-            actual=quote.payment_status,
-            expected=PaymentStatus.PENDING,
-            context="paymentStatus",
+        self._assert_statuses(
+            quote,
+            expected_quote_status=QuoteStatus.PENDING,
+            expected_payment_status=PaymentStatus.PENDING,
         )
 
     @allure.step("Quote is accepted and processing")
     def assert_quote_accepted(self, quote: Quote) -> None:
-        checks.assert_equal(
-            actual=quote.quote_status,
-            expected=QuoteStatus.ACCEPTED,
-            context="quoteStatus",
-        )
-        checks.assert_equal(
-            actual=quote.payment_status,
-            expected=PaymentStatus.PROCESSING,
-            context="paymentStatus",
+        self._assert_statuses(
+            quote,
+            expected_quote_status=QuoteStatus.ACCEPTED,
+            expected_payment_status=PaymentStatus.PROCESSING,
         )
 
     @allure.step("Quote is expired")
     def assert_quote_expired(self, quote: Quote) -> None:
-        checks.assert_equal(
-            actual=quote.quote_status,
-            expected=QuoteStatus.EXPIRED,
-            context="quoteStatus",
-        )
-        checks.assert_equal(
-            actual=quote.payment_status,
-            expected=PaymentStatus.EXPIRED,
-            context="paymentStatus",
+        self._assert_statuses(
+            quote,
+            expected_quote_status=QuoteStatus.EXPIRED,
+            expected_payment_status=PaymentStatus.EXPIRED,
         )
 
     @allure.step("Settled quote: statuses, self-consistency, and amount math are correct")
